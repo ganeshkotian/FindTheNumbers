@@ -291,7 +291,7 @@
   <div id="winModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="winTitle">
     <div class="modal-card">
       <h2 id="winTitle">Level Complete!</h2>
-      <p id="winText">Loading next level...</p>
+      <p id="winText">Click Next Level Now to continue.</p>
       <button id="playAgainBtn" type="button">Next Level Now</button>
     </div>
   </div>
@@ -304,7 +304,6 @@
       const LEVEL_STEP = 2;
       const REVEAL_MS = 420;
       const FLIP_MS = 180;
-      const AUTO_RESTART_MS = 2400;
 
       const grid = document.getElementById("grid");
       const statusEl = document.getElementById("status");
@@ -321,7 +320,6 @@
       let clickLocked = false;
       let matchedCards = [];
       let gameToken = 0;
-      let restartTimer = null;
       let confettiTimer = null;
 
       function wait(ms) {
@@ -462,7 +460,7 @@
           setStatus();
 
           if (nextExpected > levelBlocks) {
-            await onWin(token);
+            await onWin();
             return;
           }
 
@@ -489,18 +487,12 @@
         clickLocked = false;
       }
 
-      async function onWin(token) {
+      async function onWin() {
         const nextLevelBlocks = levelBlocks + LEVEL_STEP;
         statusEl.textContent = `Level ${levelBlocks} complete!`;
-        winText.textContent = `Great run. Next level has ${nextLevelBlocks} blocks.`;
+        winText.textContent = `Great run. Next level has ${nextLevelBlocks} blocks. Click Next Level Now to continue.`;
         showModal();
         launchConfetti();
-
-        clearTimeout(restartTimer);
-        restartTimer = setTimeout(() => {
-          if (token !== gameToken) return;
-          advanceLevel();
-        }, AUTO_RESTART_MS);
       }
 
       function startNewGame() {
@@ -509,7 +501,6 @@
         clickLocked = false;
         matchedCards = [];
 
-        clearTimeout(restartTimer);
         clearTimeout(confettiTimer);
 
         hideModal();
@@ -530,12 +521,10 @@
 
       newGameBtn.addEventListener("click", startNewGame);
       nextLevelBtn.addEventListener("click", () => {
-        clearTimeout(restartTimer);
         advanceLevel();
       });
       resetBtn.addEventListener("click", resetProgress);
       playAgainBtn.addEventListener("click", () => {
-        clearTimeout(restartTimer);
         advanceLevel();
       });
       window.addEventListener("resize", () => applyGridSizing(levelBlocks));
