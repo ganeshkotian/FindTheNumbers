@@ -213,7 +213,6 @@
     }
 
     .modal-card button {
-      margin-top: 14px;
       border: 0;
       border-radius: 10px;
       padding: 9px 14px;
@@ -221,6 +220,57 @@
       cursor: pointer;
       color: #0f172a;
       background: #22d3ee;
+    }
+
+    .preview-label {
+      margin-top: 12px;
+      color: #cbd5e1;
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+
+    .preview-grid {
+      --p-cols: 2;
+      --p-rows: 2;
+      display: grid;
+      grid-template-columns: repeat(var(--p-cols), minmax(0, 1fr));
+      grid-template-rows: repeat(var(--p-rows), minmax(0, 1fr));
+      gap: 6px;
+      width: min(320px, 86vw);
+      aspect-ratio: calc(var(--p-cols) / var(--p-rows));
+      margin: 10px auto 0;
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #0b1220;
+      overflow: hidden;
+    }
+
+    .preview-card {
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: linear-gradient(150deg, var(--card-back-1), var(--card-back-2));
+      color: #e0f2fe;
+      font-size: clamp(0.68rem, 2.8vw, 1rem);
+      font-weight: 900;
+      box-shadow: inset 0 0 0 1px #00000022;
+    }
+
+    .modal-actions {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .modal-actions button {
+      flex: 1;
+      max-width: 150px;
+    }
+
+    .share-btn {
+      background: linear-gradient(135deg, #86efac, #22c55e) !important;
     }
 
     .confetti-layer {
@@ -291,8 +341,13 @@
   <div id="winModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="winTitle">
     <div class="modal-card">
       <h2 id="winTitle">Level Complete!</h2>
-      <p id="winText">Click Next Level Now to continue.</p>
-      <button id="playAgainBtn" type="button">Next Level Now</button>
+      <p id="winText">You solved this level.</p>
+      <p class="preview-label">Solved Level Preview</p>
+      <div id="previewGrid" class="preview-grid" aria-label="Solved level preview"></div>
+      <div class="modal-actions">
+        <button id="shareBtn" class="share-btn" type="button">Share</button>
+        <button id="nextModalBtn" type="button">Next</button>
+      </div>
     </div>
   </div>
 
@@ -312,7 +367,9 @@
       const resetBtn = document.getElementById("resetBtn");
       const winModal = document.getElementById("winModal");
       const winText = document.getElementById("winText");
-      const playAgainBtn = document.getElementById("playAgainBtn");
+      const previewGrid = document.getElementById("previewGrid");
+      const shareBtn = document.getElementById("shareBtn");
+      const nextModalBtn = document.getElementById("nextModalBtn");
       const confettiLayer = document.getElementById("confettiLayer");
 
       let levelBlocks = START_BLOCKS;
@@ -357,6 +414,43 @@
 
       function clearConfetti() {
         confettiLayer.innerHTML = "";
+      }
+
+      function buildSolvedPreview() {
+        const computed = window.getComputedStyle(grid);
+        const cols = computed.getPropertyValue("--cols").trim() || "2";
+        const rows = computed.getPropertyValue("--rows").trim() || "2";
+        previewGrid.style.setProperty("--p-cols", cols);
+        previewGrid.style.setProperty("--p-rows", rows);
+        previewGrid.innerHTML = "";
+
+        const cards = Array.from(grid.querySelectorAll(".card"));
+        cards.forEach((card) => {
+          const cell = document.createElement("div");
+          cell.className = "preview-card";
+          cell.textContent = card.dataset.value || "";
+          previewGrid.appendChild(cell);
+        });
+      }
+
+      async function shareSolvedLevel() {
+        const shareText = `I solved level ${levelBlocks} in Sequence Flip (${levelBlocks} blocks)!`;
+        const shareUrl = /^https?:/.test(window.location.href) ? window.location.href : "";
+        const shareData = shareUrl
+          ? { title: "Sequence Flip", text: shareText, url: shareUrl }
+          : { title: "Sequence Flip", text: shareText };
+
+        if (navigator.share) {
+          try {
+            await navigator.share(shareData);
+            return;
+          } catch (err) {
+            if (err && err.name === "AbortError") return;
+          }
+        }
+
+        const fallbackText = shareUrl ? `${shareText} ${shareUrl}` : shareText;
+        window.open(`https://wa.me/?text=${encodeURIComponent(fallbackText)}`, "_blank", "noopener");
       }
 
       function launchConfetti() {
@@ -490,7 +584,8 @@
       async function onWin() {
         const nextLevelBlocks = levelBlocks + LEVEL_STEP;
         statusEl.textContent = `Level ${levelBlocks} complete!`;
-        winText.textContent = `Great run. Next level has ${nextLevelBlocks} blocks. Click Next Level Now to continue.`;
+        winText.textContent = `Great run. You solved level ${levelBlocks}. Next level has ${nextLevelBlocks} blocks.`;
+        buildSolvedPreview();
         showModal();
         launchConfetti();
       }
@@ -524,7 +619,8 @@
         advanceLevel();
       });
       resetBtn.addEventListener("click", resetProgress);
-      playAgainBtn.addEventListener("click", () => {
+      shareBtn.addEventListener("click", shareSolvedLevel);
+      nextModalBtn.addEventListener("click", () => {
         advanceLevel();
       });
       window.addEventListener("resize", () => applyGridSizing(levelBlocks));
