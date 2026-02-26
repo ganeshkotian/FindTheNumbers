@@ -66,6 +66,7 @@
       font-size: clamp(1.05rem, 2vw, 1.3rem);
       color: #f8fafc;
       letter-spacing: 0.3px;
+      display: none;
     }
 
     .status {
@@ -73,6 +74,7 @@
       font-size: 1rem;
       color: var(--accent);
       font-weight: 700;
+      display: none;
     }
 
     .controls {
@@ -97,6 +99,12 @@
     .btn.alt {
       background: linear-gradient(135deg, #fcd34d, #f59e0b);
       box-shadow: 0 6px 16px rgba(245, 158, 11, 0.35);
+    }
+
+    .btn.hint {
+      color: #000000;
+      background: linear-gradient(135deg, #1f2937, #000000);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
     }
 
     .btn:active {
@@ -252,7 +260,7 @@
       border-radius: 8px;
       background: linear-gradient(150deg, var(--card-back-1), var(--card-back-2));
       color: #e0f2fe;
-      font-size: clamp(0.68rem, 2.8vw, 1rem);
+      font-size: clamp(1.36rem, 5.6vw, 2rem);
       font-weight: 900;
       box-shadow: inset 0 0 0 1px #00000022;
     }
@@ -269,7 +277,7 @@
       max-width: 150px;
     }
 
-    .share-btn {
+    .restart-btn {
       background: linear-gradient(135deg, #86efac, #22c55e) !important;
     }
 
@@ -330,9 +338,7 @@
       <h1>Sequence Flip</h1>
       <p id="status" class="status">Find: 1</p>
       <div class="controls">
-        <button id="newGameBtn" class="btn" type="button">Restart Level</button>
-        <button id="nextLevelBtn" class="btn" type="button">Next Level</button>
-        <button id="resetBtn" class="btn alt" type="button">Reset to 4</button>
+        <button id="hintBtn" class="btn hint" type="button">Hint</button>
       </div>
     </div>
     <section id="grid" class="grid" aria-label="Card grid"></section>
@@ -345,7 +351,7 @@
       <p class="preview-label">Solved Level Preview</p>
       <div id="previewGrid" class="preview-grid" aria-label="Solved level preview"></div>
       <div class="modal-actions">
-        <button id="shareBtn" class="share-btn" type="button">Share</button>
+        <button id="restartModalBtn" class="restart-btn" type="button">Restart</button>
         <button id="nextModalBtn" type="button">Next</button>
       </div>
     </div>
@@ -355,29 +361,52 @@
 
   <script>
     (() => {
-      const START_BLOCKS = 4;
-      const LEVEL_STEP = 2;
+      const GRID_SIZE = 9;
+      const GRID_COLS = 3;
+      const GRID_ROWS = 3;
       const REVEAL_MS = 420;
       const FLIP_MS = 180;
+      const HINT_MS = 600;
+      const MAX_PATTERN_VALUE = 99;
+      const MAX_NEG_POS_VALUE = 10;
+      const MAX_UNIQUE_ATTEMPTS = 600;
+      const LEVEL_BLOCK_SIZE = 5;
 
       const grid = document.getElementById("grid");
       const statusEl = document.getElementById("status");
-      const newGameBtn = document.getElementById("newGameBtn");
-      const nextLevelBtn = document.getElementById("nextLevelBtn");
-      const resetBtn = document.getElementById("resetBtn");
+      const hintBtn = document.getElementById("hintBtn");
       const winModal = document.getElementById("winModal");
       const winText = document.getElementById("winText");
       const previewGrid = document.getElementById("previewGrid");
-      const shareBtn = document.getElementById("shareBtn");
+      const restartModalBtn = document.getElementById("restartModalBtn");
       const nextModalBtn = document.getElementById("nextModalBtn");
       const confettiLayer = document.getElementById("confettiLayer");
 
-      let levelBlocks = START_BLOCKS;
-      let nextExpected = 1;
+      let roundIndex = 1;
       let clickLocked = false;
-      let matchedCards = [];
+      let openedValues = new Set();
       let gameToken = 0;
       let confettiTimer = null;
+
+      let roundValues = [];
+      let deck = [];
+      let roundDeckPreset = null;
+      let targetOrder = [];
+      let targetIndex = 0;
+      let patternLabel = "";
+      let usedSequenceKeys = new Set();
+      let blockCategoryUsage = new Map();
+
+      const INTRO_ROUNDS = [
+        {
+          label: "Sequence 1-9",
+          values: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        },
+        {
+          label: "Sequence 10-18",
+          values: [10, 11, 12, 13, 14, 15, 16, 17, 18]
+        }
+      ];
 
       function wait(ms) {
         return new Promise((resolve) => setTimeout(resolve, ms));
@@ -391,9 +420,108 @@
         return values;
       }
 
+      function randomInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      function pickUniqueFromPool(pool, count) {
+        return shuffle([...pool]).slice(0, count);
+      }
+
+      function generateInterferenceGrid3x3(min, max) {
+        if (min < -10) {
+          throw new Error("Minimum number cannot be less than -10");
+        }
+
+        const size = 3;
+        const totalCells = GRID_SIZE;
+
+        const allNumbers = [];
+        for (let n = min; n <= max; n++) {
+          allNumbers.push(n);
+        }
+
+        if (allNumbers.length < totalCells) {
+          throw new Error("Range too small for 9 unique numbers");
+        }
+
+        const chosen = shuffle([...allNumbers]).slice(0, totalCells);
+        const layout = shuffle([...chosen]);
+
+        const grid3x3 = [];
+        let index = 0;
+        for (let r = 0; r < size; r++) {
+          const row = [];
+          for (let c = 0; c < size; c++) {
+            row.push(layout[index++]);
+          }
+          grid3x3.push(row);
+        }
+
+        function distance(r1, c1, r2, c2) {
+          return Math.abs(r1 - r2) + Math.abs(c1 - c2);
+        }
+
+        function findPosition(num) {
+          for (let r = 0; r < size; r++) {
+            for (let c = 0; c < size; c++) {
+              if (grid3x3[r][c] === num) return [r, c];
+            }
+          }
+          return null;
+        }
+
+        function swapAt(r1, c1, r2, c2) {
+          const temp = grid3x3[r1][c1];
+          grid3x3[r1][c1] = grid3x3[r2][c2];
+          grid3x3[r2][c2] = temp;
+        }
+
+        function enforceReversalSeparation() {
+          for (const num of chosen) {
+            const reversed = parseInt(Math.abs(num).toString().split("").reverse().join(""), 10);
+
+            if (chosen.includes(reversed) && reversed !== num) {
+              const pos1 = findPosition(num);
+              const pos2 = findPosition(reversed);
+              if (!pos1 || !pos2) continue;
+
+              const d = distance(pos1[0], pos1[1], pos2[0], pos2[1]);
+              if (d < 2) {
+                const randR = randomInt(0, size - 1);
+                const randC = randomInt(0, size - 1);
+                swapAt(pos2[0], pos2[1], randR, randC);
+              }
+            }
+          }
+        }
+
+        function enforceConsecutiveSeparation() {
+          for (const num of chosen) {
+            if (chosen.includes(num + 1)) {
+              const pos1 = findPosition(num);
+              const pos2 = findPosition(num + 1);
+              if (!pos1 || !pos2) continue;
+
+              const d = distance(pos1[0], pos1[1], pos2[0], pos2[1]);
+              if (d < 2) {
+                const randR = randomInt(0, size - 1);
+                const randC = randomInt(0, size - 1);
+                swapAt(pos2[0], pos2[1], randR, randC);
+              }
+            }
+          }
+        }
+
+        enforceReversalSeparation();
+        enforceConsecutiveSeparation();
+
+        return grid3x3;
+      }
+
       function setStatus() {
-        const nextLabel = nextExpected <= levelBlocks ? nextExpected : "✓";
-        statusEl.textContent = `Level: ${levelBlocks}  |  Find: ${nextLabel}`;
+        const nextLabel = targetIndex < targetOrder.length ? targetOrder[targetIndex] : "✓";
+        statusEl.textContent = `GRID: 9  |  Find: ${nextLabel}`;
       }
 
       function flipUp(card) {
@@ -417,11 +545,8 @@
       }
 
       function buildSolvedPreview() {
-        const computed = window.getComputedStyle(grid);
-        const cols = computed.getPropertyValue("--cols").trim() || "2";
-        const rows = computed.getPropertyValue("--rows").trim() || "2";
-        previewGrid.style.setProperty("--p-cols", cols);
-        previewGrid.style.setProperty("--p-rows", rows);
+        previewGrid.style.setProperty("--p-cols", String(GRID_COLS));
+        previewGrid.style.setProperty("--p-rows", String(GRID_ROWS));
         previewGrid.innerHTML = "";
 
         const cards = Array.from(grid.querySelectorAll(".card"));
@@ -431,26 +556,6 @@
           cell.textContent = card.dataset.value || "";
           previewGrid.appendChild(cell);
         });
-      }
-
-      async function shareSolvedLevel() {
-        const shareText = `I solved level ${levelBlocks} in Sequence Flip (${levelBlocks} blocks)!`;
-        const shareUrl = /^https?:/.test(window.location.href) ? window.location.href : "";
-        const shareData = shareUrl
-          ? { title: "Sequence Flip", text: shareText, url: shareUrl }
-          : { title: "Sequence Flip", text: shareText };
-
-        if (navigator.share) {
-          try {
-            await navigator.share(shareData);
-            return;
-          } catch (err) {
-            if (err && err.name === "AbortError") return;
-          }
-        }
-
-        const fallbackText = shareUrl ? `${shareText} ${shareUrl}` : shareText;
-        window.open(`https://wa.me/?text=${encodeURIComponent(fallbackText)}`, "_blank", "noopener");
       }
 
       function launchConfetti() {
@@ -475,52 +580,220 @@
         confettiTimer = setTimeout(clearConfetti, 2800);
       }
 
-      function getLayout(total) {
-        const fixedLayouts = {
-          4: { cols: 2, rows: 2 },
-          6: { cols: 3, rows: 3 },
-          8: { cols: 4, rows: 4 },
-          10: { cols: 5, rows: 5 },
-          12: { cols: 3, rows: 4 },
-          14: { cols: 7, rows: 7 },
-          16: { cols: 4, rows: 4 }
-        };
+      // === PATTERN MODE START (easy to comment if you want to disable these rules) ===
+      const REQUIRED_BLOCK_CATEGORIES = ["negative", "sequence", "multiples"];
 
-        if (fixedLayouts[total]) return fixedLayouts[total];
-
-        const cols = Math.ceil(Math.sqrt(total));
-        const rows = Math.ceil(total / cols);
-        return { cols, rows };
+      function isPrime(value) {
+        if (value < 2) return false;
+        if (value === 2) return true;
+        if (value % 2 === 0) return false;
+        const end = Math.floor(Math.sqrt(value));
+        for (let n = 3; n <= end; n += 2) {
+          if (value % n === 0) return false;
+        }
+        return true;
       }
 
-      function applyGridSizing(total) {
-        const { cols, rows } = getLayout(total);
+      const PATTERN_BUILDERS = [
+        {
+          category: "sequence",
+          label: "Proper sequence",
+          build: (maxValue) => {
+            const safeMax = Math.max(GRID_SIZE, maxValue);
+            const start = randomInt(1, safeMax - GRID_SIZE + 1);
+            return Array.from({ length: GRID_SIZE }, (_, i) => start + i);
+          }
+        },
+        {
+          category: "random",
+          label: "Any 9 random numbers (1-99)",
+          build: (maxValue) => {
+            const grid3x3 = generateInterferenceGrid3x3(1, maxValue);
+            const flat = grid3x3.flat();
+            return { values: [...flat], deck: flat };
+          }
+        },
+        {
+          category: "negative",
+          label: "Negative/Positive (-10 to 10)",
+          build: () => {
+            const values = new Set();
+            values.add(-randomInt(1, MAX_NEG_POS_VALUE));
+            values.add(randomInt(1, MAX_NEG_POS_VALUE));
+            while (values.size < GRID_SIZE) {
+              values.add(randomInt(-MAX_NEG_POS_VALUE, MAX_NEG_POS_VALUE));
+            }
+            return [...values];
+          }
+        },
+        {
+          category: "multiples",
+          label: "Multiples of 3, 4, 6 or 7",
+          build: (maxValue) => {
+            const pool = [];
+            for (let n = 1; n <= maxValue; n++) {
+              if (n % 3 === 0 || n % 4 === 0 || n % 6 === 0 || n % 7 === 0) pool.push(n);
+            }
+            return pickUniqueFromPool(pool, GRID_SIZE);
+          }
+        },
+        {
+          category: "mirror",
+          label: "12,21 / 13,31 / 14,41 / 15,51 / 16",
+          build: (maxValue) => (maxValue >= 51 ? [12, 21, 13, 31, 14, 41, 15, 51, 16] : [12, 21, 13, 31, 14, 41, 15, 24, 16])
+        },
+        {
+          category: "prime",
+          label: "Prime numbers",
+          build: (maxValue) => {
+            const pool = [];
+            for (let n = 2; n <= maxValue; n++) {
+              if (isPrime(n)) pool.push(n);
+            }
+            return pickUniqueFromPool(pool, GRID_SIZE);
+          }
+        }
+      ];
+
+      function sequenceKey(values) {
+        return [...values].sort((a, b) => a - b).join(",");
+      }
+
+      function getChallengeMeta(roundNumber) {
+        const challengeRound = roundNumber - INTRO_ROUNDS.length;
+        const blockIndex = Math.floor((challengeRound - 1) / LEVEL_BLOCK_SIZE);
+        const blockPosition = ((challengeRound - 1) % LEVEL_BLOCK_SIZE) + 1;
+        return { challengeRound, blockIndex, blockPosition };
+      }
+
+      function getBlockUsageSet(blockIndex) {
+        if (!blockCategoryUsage.has(blockIndex)) {
+          blockCategoryUsage.set(blockIndex, new Set());
+        }
+        return blockCategoryUsage.get(blockIndex);
+      }
+
+      function getBlockRequirementState(roundNumber) {
+        const { blockIndex, blockPosition } = getChallengeMeta(roundNumber);
+        const usedCategories = getBlockUsageSet(blockIndex);
+        const missingRequired = REQUIRED_BLOCK_CATEGORIES.filter((category) => !usedCategories.has(category));
+        const remainingSlots = LEVEL_BLOCK_SIZE - blockPosition + 1;
+        return { blockIndex, missingRequired, remainingSlots };
+      }
+
+      function getMaxValueForRound(roundNumber) {
+        return roundNumber <= 10 ? 50 : MAX_PATTERN_VALUE;
+      }
+
+      function getCandidateBuilders(roundNumber) {
+        const { missingRequired, remainingSlots } = getBlockRequirementState(roundNumber);
+
+        if (missingRequired.length === 0) {
+          return PATTERN_BUILDERS;
+        }
+
+        // If we are running out of slots, we must pick from remaining required categories.
+        if (missingRequired.length >= remainingSlots) {
+          return PATTERN_BUILDERS.filter((builder) => missingRequired.includes(builder.category));
+        }
+
+        // Otherwise, bias toward missing required categories but allow other patterns too.
+        const preferred = PATTERN_BUILDERS.filter((builder) => missingRequired.includes(builder.category));
+        return Math.random() < 0.65 ? preferred : PATTERN_BUILDERS;
+      }
+
+      function pickPatternRound(roundNumber) {
+        const { blockIndex } = getChallengeMeta(roundNumber);
+        const blockUsage = getBlockUsageSet(blockIndex);
+        const maxValue = getMaxValueForRound(roundNumber);
+
+        for (let attempt = 0; attempt < MAX_UNIQUE_ATTEMPTS; attempt++) {
+          const candidates = getCandidateBuilders(roundNumber);
+          if (candidates.length === 0) break;
+          const builder = candidates[Math.floor(Math.random() * candidates.length)];
+          const built = builder.build(maxValue);
+          const values = Array.isArray(built) ? built : built.values;
+          const presetDeck = Array.isArray(built) ? null : built.deck;
+          const key = sequenceKey(values);
+          if (usedSequenceKeys.has(key)) continue;
+
+          blockUsage.add(builder.category);
+          return { label: builder.label, values, deck: presetDeck };
+        }
+
+        // Extra constrained pass: prefer remaining required categories if any are still missing.
+        const { missingRequired } = getBlockRequirementState(roundNumber);
+        const forcedBuilders = missingRequired.length > 0
+          ? PATTERN_BUILDERS.filter((builder) => missingRequired.includes(builder.category))
+          : PATTERN_BUILDERS;
+
+        for (let attempt = 0; attempt < MAX_UNIQUE_ATTEMPTS; attempt++) {
+          const builder = forcedBuilders[Math.floor(Math.random() * forcedBuilders.length)];
+          const built = builder.build(maxValue);
+          const values = Array.isArray(built) ? built : built.values;
+          const presetDeck = Array.isArray(built) ? null : built.deck;
+          const key = sequenceKey(values);
+          if (usedSequenceKeys.has(key)) continue;
+
+          blockUsage.add(builder.category);
+          return { label: builder.label, values, deck: presetDeck };
+        }
+
+        // Last resort: enforce uniqueness with generic random pool.
+        let fallback = pickUniqueFromPool(
+          Array.from({ length: maxValue }, (_, i) => i + 1),
+          GRID_SIZE
+        );
+        while (usedSequenceKeys.has(sequenceKey(fallback))) {
+          fallback = pickUniqueFromPool(
+            Array.from({ length: maxValue }, (_, i) => i + 1),
+            GRID_SIZE
+          );
+        }
+        blockUsage.add("random");
+        return {
+          label: maxValue === 50 ? "Any 9 random numbers (1-50)" : "Any 9 random numbers (1-99)",
+          values: fallback,
+          deck: null
+        };
+      }
+
+      function getRoundDefinition(roundNumber) {
+        if (roundNumber <= INTRO_ROUNDS.length) {
+          const intro = INTRO_ROUNDS[roundNumber - 1];
+          return { label: intro.label, values: [...intro.values] };
+        }
+
+        return pickPatternRound(roundNumber);
+      }
+      // === PATTERN MODE END ===
+
+      function applyGridSizing() {
         const mobile = window.innerWidth <= 520;
         const gap = mobile ? 8 : 10;
         const maxGridWidth = Math.max(40, grid.clientWidth - 6);
         const maxGridHeight = Math.max(40, grid.clientHeight - 6);
-        const sizeByWidth = (maxGridWidth - gap * (cols - 1)) / cols;
-        const sizeByHeight = (maxGridHeight - gap * (rows - 1)) / rows;
-        const raw = Math.min(sizeByWidth, sizeByHeight);
-        const step = Math.max(0, (total - START_BLOCKS) / LEVEL_STEP);
-        const levelScale = Math.max(0.9, 1 - step * 0.008);
-        const cardSize = Math.max(16, Math.floor(raw * levelScale * 0.98));
+        const sizeByWidth = (maxGridWidth - gap * (GRID_COLS - 1)) / GRID_COLS;
+        const sizeByHeight = (maxGridHeight - gap * (GRID_ROWS - 1)) / GRID_ROWS;
+        const cardSize = Math.max(24, Math.floor(Math.min(sizeByWidth, sizeByHeight) * 0.98));
 
-        grid.style.setProperty("--cols", String(cols));
-        grid.style.setProperty("--rows", String(rows));
+        grid.style.setProperty("--cols", String(GRID_COLS));
+        grid.style.setProperty("--rows", String(GRID_ROWS));
         grid.style.setProperty("--gap", `${gap}px`);
         grid.style.setProperty("--card-size", `${cardSize}px`);
       }
 
       function buildGrid() {
         grid.innerHTML = "";
-        applyGridSizing(levelBlocks);
-        const values = shuffle(Array.from({ length: levelBlocks }, (_, i) => i + 1));
+        deck = Array.isArray(roundDeckPreset) && roundDeckPreset.length === GRID_SIZE
+          ? [...roundDeckPreset]
+          : shuffle([...roundValues]);
+        applyGridSizing();
 
-        values.forEach((value) => {
+        deck.forEach((value) => {
           const card = document.createElement("button");
           card.type = "button";
-          card.className = "card";
+          card.className = openedValues.has(value) ? "card flipped" : "card";
           card.dataset.value = String(value);
           card.setAttribute("aria-label", "Hidden card");
           card.innerHTML = `
@@ -533,7 +806,7 @@
           grid.appendChild(card);
         });
 
-        requestAnimationFrame(() => applyGridSizing(levelBlocks));
+        requestAnimationFrame(() => applyGridSizing());
       }
 
       async function onCardClick(card) {
@@ -548,12 +821,13 @@
         await wait(FLIP_MS);
         if (token !== gameToken) return;
 
-        if (value === nextExpected) {
-          matchedCards.push(card);
-          nextExpected += 1;
+        const expectedValue = targetOrder[targetIndex];
+        if (value === expectedValue) {
+          openedValues.add(value);
+          targetIndex += 1;
           setStatus();
 
-          if (nextExpected > levelBlocks) {
+          if (targetIndex >= targetOrder.length) {
             await onWin();
             return;
           }
@@ -567,12 +841,11 @@
 
         flipDown(card);
 
-        if (nextExpected > 1) {
-          for (const opened of matchedCards) {
-            flipDown(opened);
-          }
-          matchedCards = [];
-          nextExpected = 1;
+        if (targetIndex > 0) {
+          const openedCards = grid.querySelectorAll(".card.flipped");
+          openedCards.forEach((openedCard) => flipDown(openedCard));
+          openedValues.clear();
+          targetIndex = 0;
           setStatus();
         }
 
@@ -581,51 +854,73 @@
         clickLocked = false;
       }
 
+      async function showHint() {
+        if (clickLocked) return;
+        if (winModal.classList.contains("show")) return;
+        const expectedValue = targetOrder[targetIndex];
+        if (typeof expectedValue !== "number") return;
+        const hintCard = grid.querySelector(`.card[data-value="${expectedValue}"]:not(.flipped)`);
+        if (!hintCard) return;
+
+        const token = gameToken;
+        clickLocked = true;
+        flipUp(hintCard);
+        await wait(HINT_MS);
+        if (token !== gameToken) return;
+        flipDown(hintCard);
+        await wait(FLIP_MS);
+        if (token !== gameToken) return;
+        clickLocked = false;
+      }
+
       async function onWin() {
-        const nextLevelBlocks = levelBlocks + LEVEL_STEP;
-        statusEl.textContent = `Level ${levelBlocks} complete!`;
-        winText.textContent = `Great run. You solved level ${levelBlocks}. Next level has ${nextLevelBlocks} blocks.`;
+        clickLocked = true;
+        statusEl.textContent = "GRID 9 complete!";
+        winText.textContent = `Round ${roundIndex} solved. Pattern: ${patternLabel}. Restart begins from the first sequence; Next continues.`;
         buildSolvedPreview();
         showModal();
         launchConfetti();
       }
 
-      function startNewGame() {
+      function startRound() {
         gameToken += 1;
-        nextExpected = 1;
+        targetIndex = 0;
         clickLocked = false;
-        matchedCards = [];
+        openedValues = new Set();
 
         clearTimeout(confettiTimer);
 
         hideModal();
         clearConfetti();
+
+        const round = getRoundDefinition(roundIndex);
+        patternLabel = round.label;
+        roundValues = round.values;
+        roundDeckPreset = Array.isArray(round.deck) ? [...round.deck] : null;
+        usedSequenceKeys.add(sequenceKey(roundValues));
+
+        targetOrder = [...roundValues].sort((a, b) => a - b);
         buildGrid();
         setStatus();
       }
 
-      function advanceLevel() {
-        levelBlocks += LEVEL_STEP;
-        startNewGame();
+      function restartGame() {
+        roundIndex = 1;
+        usedSequenceKeys = new Set();
+        blockCategoryUsage = new Map();
+        startRound();
       }
 
-      function resetProgress() {
-        levelBlocks = START_BLOCKS;
-        startNewGame();
+      function nextRound() {
+        roundIndex += 1;
+        startRound();
       }
+      hintBtn.addEventListener("click", showHint);
+      restartModalBtn.addEventListener("click", restartGame);
+      nextModalBtn.addEventListener("click", nextRound);
+      window.addEventListener("resize", applyGridSizing);
 
-      newGameBtn.addEventListener("click", startNewGame);
-      nextLevelBtn.addEventListener("click", () => {
-        advanceLevel();
-      });
-      resetBtn.addEventListener("click", resetProgress);
-      shareBtn.addEventListener("click", shareSolvedLevel);
-      nextModalBtn.addEventListener("click", () => {
-        advanceLevel();
-      });
-      window.addEventListener("resize", () => applyGridSizing(levelBlocks));
-
-      startNewGame();
+      startRound();
     })();
   </script>
 </body>
