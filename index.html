@@ -235,7 +235,7 @@
     }
 
     .modal-card {
-      width: min(420px, 92vw);
+      width: min(460px, 92vw);
       border-radius: 14px;
       padding: 22px 18px;
       text-align: center;
@@ -243,10 +243,13 @@
       background: linear-gradient(165deg, #0f172a, #111827);
       border: 1px solid #334155;
       box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     .modal-card h2 {
-      margin: 0 0 8px;
+      margin: 0 0 14px;
       color: #f8fafc;
       font-size: 1.45rem;
     }
@@ -283,13 +286,12 @@
       gap: 6px;
       width: min(320px, 86vw);
       aspect-ratio: calc(var(--p-cols) / var(--p-rows));
-      margin: 10px auto 0;
+      margin: 0 auto;
       padding: 8px;
       border-radius: 10px;
       border: 1px solid #334155;
       background: #0b1220;
       overflow: hidden;
-      display: none;
     }
 
     .preview-card {
@@ -304,15 +306,16 @@
     }
 
     .modal-actions {
-      margin-top: 14px;
+      margin-top: 18px;
       display: flex;
       gap: 10px;
       justify-content: center;
+      width: 100%;
     }
 
     .modal-actions button {
-      flex: 1;
-      max-width: 150px;
+      flex: 0 0 auto;
+      width: min(180px, 100%);
     }
 
     .restart-btn {
@@ -403,7 +406,7 @@
 
   <div id="winModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="winTitle">
     <div class="modal-card">
-      <h2 id="winTitle">Level Complete!</h2>
+      <h2 id="winTitle">LEVEL complete!</h2>
       <p id="winText">You solved this level.</p>
       <p class="preview-label">Solved Level Preview</p>
       <div id="previewGrid" class="preview-grid" aria-label="Solved level preview"></div>
