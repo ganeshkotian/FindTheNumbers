@@ -113,19 +113,55 @@
 
     .grid {
       display: grid;
-      --cols: 2;
-      --rows: 2;
-      --gap: 10px;
-      --card-size: 92px;
       grid-template-columns: repeat(var(--cols), var(--card-size));
       grid-template-rows: repeat(var(--rows), var(--card-size));
       gap: var(--gap);
       justify-content: center;
       align-content: center;
+      overflow: hidden;
+      padding: 0;
+      z-index: 2;
+    }
+
+    .grid-shell {
+      position: relative;
       flex: 1;
       min-height: 0;
-      overflow: hidden;
-      padding: 4px;
+      display: grid;
+      place-items: center;
+      --cols: 2;
+      --rows: 2;
+      --gap: 10px;
+      --card-size: 92px;
+      --frame-gap: 10px;
+      --frame-stroke: 5px;
+    }
+
+    .grid-shell > * {
+      grid-area: 1 / 1;
+    }
+
+    .progress-frame {
+      position: relative;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+      overflow: visible;
+      z-index: 1;
+    }
+
+    .progress-track {
+      fill: none;
+      stroke: #000000;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .progress-fill {
+      fill: none;
+      stroke: url(#frameGradient);
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .card {
@@ -235,6 +271,7 @@
       color: #cbd5e1;
       font-size: 0.92rem;
       font-weight: 700;
+      display: none;
     }
 
     .preview-grid {
@@ -252,6 +289,7 @@
       border: 1px solid #334155;
       background: #0b1220;
       overflow: hidden;
+      display: none;
     }
 
     .preview-card {
@@ -279,6 +317,11 @@
 
     .restart-btn {
       background: linear-gradient(135deg, #86efac, #22c55e) !important;
+      display: none;
+    }
+
+    #winText {
+      display: none;
     }
 
     .confetti-layer {
@@ -341,7 +384,21 @@
         <button id="hintBtn" class="btn hint" type="button">Hint</button>
       </div>
     </div>
-    <section id="grid" class="grid" aria-label="Card grid"></section>
+    <div id="gridShell" class="grid-shell">
+      <svg id="progressFrame" class="progress-frame" aria-hidden="true">
+        <defs>
+          <linearGradient id="frameGradient" x1="50%" y1="100%" x2="50%" y2="0%">
+            <stop offset="0%" stop-color="#ff7a00"></stop>
+            <stop offset="48%" stop-color="#ffd400"></stop>
+            <stop offset="100%" stop-color="#00e676"></stop>
+          </linearGradient>
+        </defs>
+        <rect id="frameTrack" class="progress-track"></rect>
+        <path id="frameProgressLeft" class="progress-fill"></path>
+        <path id="frameProgressRight" class="progress-fill"></path>
+      </svg>
+      <section id="grid" class="grid" aria-label="Card grid"></section>
+    </div>
   </main>
 
   <div id="winModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="winTitle">
@@ -367,12 +424,17 @@
       const REVEAL_MS = 420;
       const FLIP_MS = 180;
       const HINT_MS = 600;
-      const MAX_PATTERN_VALUE = 99;
-      const MAX_NEG_POS_VALUE = 10;
+      const MAX_PATTERN_VALUE = 25;
+      const MAX_NEGATIVE_VALUE = 5;
       const MAX_UNIQUE_ATTEMPTS = 600;
       const LEVEL_BLOCK_SIZE = 5;
 
+      const gridShell = document.getElementById("gridShell");
       const grid = document.getElementById("grid");
+      const progressFrame = document.getElementById("progressFrame");
+      const frameTrack = document.getElementById("frameTrack");
+      const frameProgressLeft = document.getElementById("frameProgressLeft");
+      const frameProgressRight = document.getElementById("frameProgressRight");
       const statusEl = document.getElementById("status");
       const hintBtn = document.getElementById("hintBtn");
       const winModal = document.getElementById("winModal");
@@ -393,6 +455,7 @@
       let roundDeckPreset = null;
       let targetOrder = [];
       let targetIndex = 0;
+      let frameMetrics = { leftLength: 0, rightLength: 0 };
       let patternLabel = "";
       let usedSequenceKeys = new Set();
       let blockCategoryUsage = new Map();
@@ -429,8 +492,8 @@
       }
 
       function generateInterferenceGrid3x3(min, max) {
-        if (min < -10) {
-          throw new Error("Minimum number cannot be less than -10");
+        if (min < -5) {
+          throw new Error("Minimum number cannot be less than -5");
         }
 
         const size = 3;
@@ -522,6 +585,19 @@
       function setStatus() {
         const nextLabel = targetIndex < targetOrder.length ? targetOrder[targetIndex] : "✓";
         statusEl.textContent = `GRID: 9  |  Find: ${nextLabel}`;
+        updateFrameProgress();
+      }
+
+      function updateFrameProgress() {
+        const total = targetOrder.length || GRID_SIZE;
+        const ratio = Math.max(0, Math.min(1, targetIndex / total));
+        const leftVisible = frameMetrics.leftLength * ratio;
+        const rightVisible = frameMetrics.rightLength * ratio;
+
+        frameProgressLeft.style.strokeDasharray = `${leftVisible} ${Math.max(1, frameMetrics.leftLength)}`;
+        frameProgressRight.style.strokeDasharray = `${rightVisible} ${Math.max(1, frameMetrics.rightLength)}`;
+        frameProgressLeft.style.strokeDashoffset = "0";
+        frameProgressRight.style.strokeDashoffset = "0";
       }
 
       function flipUp(card) {
@@ -606,7 +682,7 @@
         },
         {
           category: "random",
-          label: "Any 9 random numbers (1-99)",
+          label: "Any 9 random numbers (1-25)",
           build: (maxValue) => {
             const grid3x3 = generateInterferenceGrid3x3(1, maxValue);
             const flat = grid3x3.flat();
@@ -615,13 +691,13 @@
         },
         {
           category: "negative",
-          label: "Negative/Positive (-10 to 10)",
-          build: () => {
+          label: "Negative/Positive (-5 to 25)",
+          build: (maxValue) => {
             const values = new Set();
-            values.add(-randomInt(1, MAX_NEG_POS_VALUE));
-            values.add(randomInt(1, MAX_NEG_POS_VALUE));
+            values.add(-randomInt(1, MAX_NEGATIVE_VALUE));
+            values.add(randomInt(1, maxValue));
             while (values.size < GRID_SIZE) {
-              values.add(randomInt(-MAX_NEG_POS_VALUE, MAX_NEG_POS_VALUE));
+              values.add(randomInt(-MAX_NEGATIVE_VALUE, maxValue));
             }
             return [...values];
           }
@@ -639,8 +715,8 @@
         },
         {
           category: "mirror",
-          label: "12,21 / 13,31 / 14,41 / 15,51 / 16",
-          build: (maxValue) => (maxValue >= 51 ? [12, 21, 13, 31, 14, 41, 15, 51, 16] : [12, 21, 13, 31, 14, 41, 15, 24, 16])
+          label: "12,21 / 13,23 / 14,24 / 15,25 / 16",
+          build: () => [12, 21, 13, 23, 14, 24, 15, 25, 16]
         },
         {
           category: "prime",
@@ -682,7 +758,7 @@
       }
 
       function getMaxValueForRound(roundNumber) {
-        return roundNumber <= 10 ? 50 : MAX_PATTERN_VALUE;
+        return MAX_PATTERN_VALUE;
       }
 
       function getCandidateBuilders(roundNumber) {
@@ -752,7 +828,7 @@
         }
         blockUsage.add("random");
         return {
-          label: maxValue === 50 ? "Any 9 random numbers (1-50)" : "Any 9 random numbers (1-99)",
+          label: "Any 9 random numbers (1-25)",
           values: fallback,
           deck: null
         };
@@ -771,16 +847,70 @@
       function applyGridSizing() {
         const mobile = window.innerWidth <= 520;
         const gap = mobile ? 8 : 10;
-        const maxGridWidth = Math.max(40, grid.clientWidth - 6);
-        const maxGridHeight = Math.max(40, grid.clientHeight - 6);
+        const shellStyles = getComputedStyle(gridShell);
+        const frameGap = parseFloat(shellStyles.getPropertyValue("--frame-gap")) || 0;
+        const frameStroke = parseFloat(shellStyles.getPropertyValue("--frame-stroke")) || 0;
+        const frameAllowance = ((frameGap + frameStroke) * 2) + 2;
+        const maxGridWidth = Math.max(40, gridShell.clientWidth - frameAllowance);
+        const maxGridHeight = Math.max(40, gridShell.clientHeight - frameAllowance);
         const sizeByWidth = (maxGridWidth - gap * (GRID_COLS - 1)) / GRID_COLS;
         const sizeByHeight = (maxGridHeight - gap * (GRID_ROWS - 1)) / GRID_ROWS;
         const cardSize = Math.max(24, Math.floor(Math.min(sizeByWidth, sizeByHeight) * 0.98));
+        const gridWidth = (GRID_COLS * cardSize) + ((GRID_COLS - 1) * gap);
+        const gridHeight = (GRID_ROWS * cardSize) + ((GRID_ROWS - 1) * gap);
+        const frameWidth = gridWidth + ((frameGap + frameStroke) * 2);
+        const frameHeight = gridHeight + ((frameGap + frameStroke) * 2);
+        const rectX = frameStroke / 2;
+        const rectY = frameStroke / 2;
+        const rectWidth = Math.max(0, frameWidth - frameStroke);
+        const rectHeight = Math.max(0, frameHeight - frameStroke);
+        const rectRadius = Math.max(14, cardSize * 0.08);
+        const left = rectX;
+        const right = rectX + rectWidth;
+        const top = rectY;
+        const bottom = rectY + rectHeight;
+        const midX = rectX + (rectWidth / 2);
+        const radius = Math.min(rectRadius, rectWidth / 2, rectHeight / 2);
+        const leftPath = [
+          `M ${midX} ${bottom}`,
+          `H ${left + radius}`,
+          `Q ${left} ${bottom} ${left} ${bottom - radius}`,
+          `V ${top + radius}`,
+          `Q ${left} ${top} ${left + radius} ${top}`,
+          `H ${midX}`
+        ].join(" ");
+        const rightPath = [
+          `M ${midX} ${bottom}`,
+          `H ${right - radius}`,
+          `Q ${right} ${bottom} ${right} ${bottom - radius}`,
+          `V ${top + radius}`,
+          `Q ${right} ${top} ${right - radius} ${top}`,
+          `H ${midX}`
+        ].join(" ");
 
-        grid.style.setProperty("--cols", String(GRID_COLS));
-        grid.style.setProperty("--rows", String(GRID_ROWS));
-        grid.style.setProperty("--gap", `${gap}px`);
-        grid.style.setProperty("--card-size", `${cardSize}px`);
+        gridShell.style.setProperty("--cols", String(GRID_COLS));
+        gridShell.style.setProperty("--rows", String(GRID_ROWS));
+        gridShell.style.setProperty("--gap", `${gap}px`);
+        gridShell.style.setProperty("--card-size", `${cardSize}px`);
+        progressFrame.style.width = `${frameWidth}px`;
+        progressFrame.style.height = `${frameHeight}px`;
+        progressFrame.setAttribute("viewBox", `0 0 ${frameWidth} ${frameHeight}`);
+        frameTrack.setAttribute("x", String(rectX));
+        frameTrack.setAttribute("y", String(rectY));
+        frameTrack.setAttribute("width", String(rectWidth));
+        frameTrack.setAttribute("height", String(rectHeight));
+        frameTrack.setAttribute("rx", String(rectRadius));
+        frameTrack.setAttribute("ry", String(rectRadius));
+        frameTrack.setAttribute("stroke-width", String(frameStroke));
+        frameProgressLeft.setAttribute("d", leftPath);
+        frameProgressLeft.setAttribute("stroke-width", String(frameStroke));
+        frameProgressRight.setAttribute("d", rightPath);
+        frameProgressRight.setAttribute("stroke-width", String(frameStroke));
+        frameMetrics = {
+          leftLength: frameProgressLeft.getTotalLength(),
+          rightLength: frameProgressRight.getTotalLength()
+        };
+        updateFrameProgress();
       }
 
       function buildGrid() {
