@@ -1,0 +1,2533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wordle Space - 1000 Puzzles</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Clear Sans', Arial, sans-serif;
+            background: #000008;
+            color: #fff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        #space-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+        
+        #confetti-canvas {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+        }
+        
+        #game-container {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 40px 16px 12px 16px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        /* Progress Bar */
+        /* Progress Bar (hidden - user designing new XP-based one) */
+        #progress-container {
+            display: none;
+            width: 100%;
+            margin-bottom: 12px;
+        }
+        
+        #progress-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 4px;
+        }
+        
+        #progress-wins {
+            color: #ffe66d;
+        }
+        
+        #progress-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        #progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4488ff, #ffe66d);
+            border-radius: 3px;
+            transition: width 0.6s ease;
+        }
+        
+        /* Hint Card */
+        #hint-card {
+            width: 100%;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            margin-top: 10px;
+            margin-bottom: 0;
+        }
+        
+        #hint-card.dissolve {
+            animation: hintDissolve 0.4s ease-out forwards;
+        }
+        
+        @keyframes hintDissolve {
+            0% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+        
+        #hint-card.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        #hint-card.fadeIn {
+            animation: fadeIn 0.8s ease-out forwards;
+        }
+        
+        /* Top area container - fixed height */
+        #top-area {
+            width: 100%;
+            margin-bottom: 4px;
+        }
+        
+        #hint-text {
+            font-size: 22.5px;
+            font-weight: 400;
+            color: #f0f0f0;
+            line-height: 1.5;
+            text-transform: uppercase;
+        }
+        
+        #score-display {
+            font-size: 11px;
+            color: rgba(255,255,255,0.45);
+            margin-top: 6px;
+        }
+        
+        /* Game Grid */
+        #grid-container {
+            position: relative;
+            margin-bottom: 8px;
+        }
+        
+        #grid {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .row {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+        }
+        
+        .tile {
+            width: 52px;
+            height: 52px;
+            border: 2px solid #3a3a3c;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            text-transform: uppercase;
+            background: rgba(0,0,0,0.4);
+            transition: all 0.3s;
+            user-select: none;
+        }
+        
+        .tile.active {
+            border-color: #878a8c;
+        }
+        
+        .tile.correct {
+            background: #538d4e;
+            border-color: #538d4e;
+        }
+        
+        .tile.present {
+            background: #b59f3b;
+            border-color: #b59f3b;
+        }
+        
+        .tile.absent {
+            background: #3a3a3c;
+            border-color: #3a3a3c;
+        }
+        
+        .row.shake {
+            animation: shake 0.5s;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-6px); }
+            40% { transform: translateX(6px); }
+            60% { transform: translateX(-4px); }
+            80% { transform: translateX(4px); }
+        }
+        
+        /* Win Popup */
+        #win-popup {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            border-radius: 14px;
+            padding: 14px 24px;
+            text-align: center;
+            z-index: 20;
+            white-space: nowrap;
+        }
+        
+        #win-popup.show {
+            display: block;
+            animation: popIn 0.35s cubic-bezier(0.175,0.885,0.32,1.275) forwards;
+        }
+        
+        #win-popup.dissolve {
+            display: block;
+            animation: dissolveOut 0.4s ease-out forwards;
+        }
+        
+        @keyframes dissolveOut {
+            0% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+        
+        #win-message {
+            font-size: 22px;
+            font-weight: bold;
+            color: #538d4e;
+            white-space: nowrap;
+        }
+        
+        #win-answer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            font-weight: bold;
+            color: #538d4e;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            opacity: 0;
+            z-index: 21;
+            pointer-events: none;
+        }
+        
+        #win-answer.show {
+            opacity: 1;
+        }
+        
+        #win-answer.dissolve {
+            animation: answerDissolve 0.4s ease-out forwards;
+        }
+        
+        @keyframes answerDissolve {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        
+        #win-xp {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 20px;
+            font-weight: bold;
+            color: #ffe66d;
+            white-space: nowrap;
+            opacity: 0;
+            z-index: 25;
+            pointer-events: none;
+        }
+        
+        #win-xp.animate {
+            animation: floatUpDissolve 1s ease-out forwards;
+        }
+        
+        @keyframes floatUpDissolve {
+            0% {
+                opacity: 1;
+                transform: translate(-50%, -50%) translateY(0);
+            }
+            70% {
+                opacity: 1;
+                transform: translate(-50%, -50%) translateY(-40px);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) translateY(-70px);
+            }
+        }
+        
+        @keyframes popIn {
+            from { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        /* Game Over */
+        #game-over {
+            display: none;
+            text-align: center;
+            padding: 12px 16px;
+            background: rgba(255,75,75,0.15);
+            border: 1px solid #ff4b4b;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            backdrop-filter: blur(4px);
+        }
+        
+        #game-over.show {
+            display: block;
+        }
+        
+        #game-over-text {
+            font-size: 15px;
+            margin-bottom: 8px;
+        }
+        
+        #answer-word {
+            color: #ff7b7b;
+            font-weight: bold;
+        }
+        
+        /* Keyboard */
+        #keyboard {
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: auto;
+            padding-bottom: 8px;
+        }
+        
+        .keyboard-row {
+            display: flex;
+            gap: 4px;
+            justify-content: center;
+        }
+        
+        .key {
+            min-width: 32px;
+            height: 48px;
+            border: none;
+            border-radius: 4px;
+            background: #818384;
+            color: #fff;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+            user-select: none;
+        }
+        
+        .key:active {
+            transform: scale(0.95);
+        }
+        
+        .key.wide {
+            min-width: 52px;
+            font-size: 12px;
+        }
+        
+        .key.correct {
+            background: #538d4e;
+        }
+        
+        .key.present {
+            background: #b59f3b;
+        }
+        
+        .key.absent {
+            background: #3a3a3c;
+        }
+        
+        /* Buttons */
+        .btn {
+            background: rgba(58,58,60,0.7);
+            color: #aaa;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 8px 20px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            margin-top: 12px;
+        }
+        
+        .btn-primary {
+            background: #538d4e;
+            color: #fff;
+            border: none;
+        }
+        
+        /* Answer Button */
+        #answer-btn {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            z-index: 999;
+            background: #b59f3b;
+            color: #fff;
+            border: none;
+            border-radius: 50px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            min-width: 32px;
+        }
+        
+        /* Total XP Display */
+        #total-xp-display {
+            position: fixed;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999;
+            background: rgba(0,0,0,0.7);
+            color: #ffe66d;
+            border: none;
+            border-radius: 50px;
+            padding: 6px 16px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        /* XP Progress Bar */
+        #xp-progress-bar {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            padding: 16px 24px;
+            background: rgba(0,0,0,0.85);
+            border-radius: 12px;
+            opacity: 0;
+            z-index: 30;
+            pointer-events: none;
+        }
+        
+        #xp-progress-bar.show {
+            opacity: 1;
+        }
+        
+        #xp-progress-bar.dissolve {
+            animation: dissolveOut 0.4s ease-out forwards;
+        }
+        
+        #rank-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffe66d;
+            margin-bottom: 8px;
+            white-space: nowrap;
+            transform: scale(1);
+            transition: transform 0.3s ease;
+        }
+        
+        #rank-title.pop {
+            animation: rankPop 0.4s ease-out;
+        }
+        
+        #rank-title.scale-up {
+            transform: scale(1.15);
+        }
+        
+        @keyframes rankPop {
+            0% {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.2);
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        #progress-track {
+            width: 180px;
+            height: 12px;
+            background: rgba(255,255,255,0.15);
+            overflow: hidden;
+            margin: 0 auto;
+            transform: scale(1);
+            transition: transform 0.3s ease;
+        }
+        
+        #progress-track.scale-up {
+            transform: scale(1.15);
+        }
+        
+        #progress-fill-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #538d4e, #7ac068);
+        }
+        
+        #progress-percent {
+            font-size: 14px;
+            font-weight: bold;
+            color: rgba(255,255,255,0.8);
+            margin-top: 6px;
+            transform: scale(1);
+            transition: transform 0.3s ease;
+        }
+        
+        #progress-percent.scale-up {
+            transform: scale(1.15);
+        }
+        
+        /* Moon Reached Overlay (hidden - user designing new XP system) */
+        #moon-overlay {
+            display: none !important;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #moon-overlay.show {
+            display: none !important;
+        }
+        
+        #moon-emoji {
+            font-size: 64px;
+        }
+        
+        #moon-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffe66d;
+            margin-top: 12px;
+        }
+        
+        #moon-subtitle {
+            font-size: 15px;
+            color: #aaa;
+            margin-top: 8px;
+        }
+        
+        /* Hidden input for mobile */
+        #hidden-input {
+            position: fixed;
+            opacity: 0;
+            width: 1px;
+            height: 1px;
+            top: 0;
+            left: 0;
+            z-index: -1;
+        }
+        
+        /* Responsive */
+        @media (max-width: 400px) {
+            .tile {
+                width: 44px;
+                height: 44px;
+                font-size: 20px;
+            }
+            
+            .key {
+                min-width: 28px;
+                height: 44px;
+                font-size: 12px;
+            }
+            
+            .key.wide {
+                min-width: 44px;
+            }
+            
+            #hint-text {
+                font-size: 20px;
+            }
+        }
+        
+        /* Show keyboard on mobile/touch devices */
+        @media (max-width: 768px) {
+            #keyboard {
+                display: flex;
+            }
+        }
+        
+        @media (hover: none) and (pointer: coarse) {
+            #keyboard {
+                display: flex;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="space-canvas"></canvas>
+    <canvas id="confetti-canvas"></canvas>
+    
+    <input type="text" id="hidden-input" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+    
+    <div id="game-container">
+        <div id="progress-container">
+            <div id="progress-labels">
+                <span>🌍 Earth</span>
+                <span id="progress-wins">0/10 wins</span>
+                <span>🌙 Moon</span>
+            </div>
+            <div id="progress-bar">
+                <div id="progress-fill"></div>
+            </div>
+        </div>
+        
+        <div id="top-area">
+            <div id="hint-card">
+                <div id="hint-text">Loading...</div>
+                <div id="score-display"></div>
+            </div>
+        </div>
+        
+        <div id="grid-container">
+            <div id="grid"></div>
+            <div id="xp-progress-bar">
+                <div id="rank-title">Rookie Resolver</div>
+                <div id="progress-track">
+                    <div id="progress-fill-bar"></div>
+                </div>
+                <div id="progress-percent">0%</div>
+            </div>
+            <div id="win-popup">
+                <div id="win-message"></div>
+            </div>
+            <div id="win-answer"></div>
+            <div id="win-xp"></div>
+        </div>
+        
+        <div id="game-over">
+            <div id="game-over-text">😔 Better luck next time!</div>
+        </div>
+        
+        <div id="keyboard"></div>
+    </div>
+    
+    <button id="answer-btn" onclick="toggleAnswer()">?</button>
+    
+    <div id="total-xp-display">⭐ 0 XP</div>
+    
+    <div id="moon-overlay">
+        <div id="moon-emoji">🌙</div>
+        <div id="moon-title">YOU REACHED THE MOON!</div>
+        <div id="moon-subtitle">10 puzzles solved — mission complete!</div>
+        <button class="btn btn-primary" style="margin-top: 24px" onclick="resetGame()">🚀 New Mission</button>
+    </div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// WORD DATA - 1000 PUZZLES
+// ═══════════════════════════════════════════════════════════════════════════
+const WORD_LIST = [
+    // EASY WORDS (400)
+    // Easy 4-letter (100)
+    { word: "AURA", hint: "Poets feel it, cameras can't catch it", d: "easy" },
+    { word: "LUSH", hint: "Where moss wins and concrete loses", d: "easy" },
+    { word: "MINT", hint: "Cold on the tongue before it melts", d: "easy" },
+    { word: "PEAR", hint: "Teardrop shaped, sweeter near the bottom", d: "easy" },
+    { word: "LION", hint: "The grass parts before it arrives", d: "easy" },
+    { word: "WAVE", hint: "Born in the deep, dies on the shore", d: "easy" },
+    { word: "GLOW", hint: "Light that stays after the flame leaves", d: "easy" },
+    { word: "BOLD", hint: "Speaks first, thinks never", d: "easy" },
+    { word: "SILK", hint: "A worm's secret the world kept", d: "easy" },
+    { word: "ECHO", hint: "Your voice, returned without permission", d: "easy" },
+    { word: "CAVE", hint: "The mountain's kept secret", d: "easy" },
+    { word: "DAWN", hint: "The sky's first confession of the day", d: "easy" },
+    { word: "DUSK", hint: "When the day loses its nerve", d: "easy" },
+    { word: "FOAM", hint: "The sea's last breath before the shore", d: "easy" },
+    { word: "GALE", hint: "Wind that means business", d: "easy" },
+    { word: "HALO", hint: "Light wearing a crown", d: "easy" },
+    { word: "LAVA", hint: "The earth bleeding heat", d: "easy" },
+    { word: "MIST", hint: "Rain that couldn't quite commit", d: "easy" },
+    { word: "PEAK", hint: "Where the climb finally stops arguing", d: "easy" },
+    { word: "REEF", hint: "The ocean's hidden city", d: "easy" },
+    { word: "BEAM", hint: "Light on a mission", d: "easy" },
+    { word: "FAWN", hint: "Born spotted, born gentle", d: "easy" },
+    { word: "GUST", hint: "Wind that changes its mind", d: "easy" },
+    { word: "ISLE", hint: "Land surrounded by loneliness", d: "easy" },
+    { word: "KNOT", hint: "Trust tied into rope", d: "easy" },
+    { word: "MOAT", hint: "Water keeping the world out", d: "easy" },
+    { word: "NOOK", hint: "The corner that kept secrets", d: "easy" },
+    { word: "PREY", hint: "Watched before it knows", d: "easy" },
+    { word: "TWIG", hint: "A branch still deciding", d: "easy" },
+    { word: "HYMN", hint: "A song reaching upward", d: "easy" },
+    { word: "RAIN", hint: "Sky returning what it borrowed", d: "easy" },
+    { word: "SNOW", hint: "Winter's silent messenger", d: "easy" },
+    { word: "FIRE", hint: "Hunger that eats everything", d: "easy" },
+    { word: "WIND", hint: "Invisible hands moving things", d: "easy" },
+    { word: "TREE", hint: "Standing still through storms", d: "easy" },
+    { word: "BIRD", hint: "Gravity's favorite rebel", d: "easy" },
+    { word: "FISH", hint: "Breathing water like we breathe air", d: "easy" },
+    { word: "STAR", hint: "Ancient light arriving late", d: "easy" },
+    { word: "MOON", hint: "Night's faithful companion", d: "easy" },
+    { word: "LAKE", hint: "A mirror for mountains", d: "easy" },
+    { word: "ROSE", hint: "Beauty with a warning", d: "easy" },
+    { word: "LEAF", hint: "Green when working, gold retiring", d: "easy" },
+    { word: "SEED", hint: "A forest waiting to happen", d: "easy" },
+    { word: "ROOT", hint: "The part that never sees what it feeds", d: "easy" },
+    { word: "SAND", hint: "Mountains that lost to time", d: "easy" },
+    { word: "ROCK", hint: "Earth being stubborn", d: "easy" },
+    { word: "CLAY", hint: "Earth soft enough to dream with", d: "easy" },
+    { word: "IRON", hint: "Strong enough to build empires", d: "easy" },
+    { word: "GOLD", hint: "What kings and fools both chase", d: "easy" },
+    { word: "SALT", hint: "The sea's gift to every kitchen", d: "easy" },
+    { word: "MILK", hint: "A mother's first offering", d: "easy" },
+    { word: "CAKE", hint: "Celebration in edible form", d: "easy" },
+    { word: "SOUP", hint: "Comfort served in a bowl", d: "easy" },
+    { word: "RICE", hint: "Half the world's daily companion", d: "easy" },
+    { word: "WINE", hint: "Grapes that forgot they were fruit", d: "easy" },
+    { word: "BEER", hint: "Liquid bread with better stories", d: "easy" },
+    { word: "DOOR", hint: "Between here and everywhere else", d: "easy" },
+    { word: "WALL", hint: "Privacy made solid", d: "easy" },
+    { word: "ROOF", hint: "The sky you can trust", d: "easy" },
+    { word: "ROAD", hint: "A line connecting lonely places", d: "easy" },
+    { word: "PATH", hint: "Where feet voted with steps", d: "easy" },
+    { word: "GATE", hint: "Permission made of metal", d: "easy" },
+    { word: "BELL", hint: "Sound waiting to be released", d: "easy" },
+    { word: "DRUM", hint: "Heartbeat you can play", d: "easy" },
+    { word: "HORN", hint: "Music from a spiral", d: "easy" },
+    { word: "SONG", hint: "Words that learned to dance", d: "easy" },
+    { word: "POEM", hint: "Feelings in Sunday clothes", d: "easy" },
+    { word: "TALE", hint: "Truth wearing a costume", d: "easy" },
+    { word: "MYTH", hint: "A lie that tells truth", d: "easy" },
+    { word: "KING", hint: "One throne, heavy head", d: "easy" },
+    { word: "SHIP", hint: "A house arguing with waves", d: "easy" },
+    { word: "BOAT", hint: "Trust floating on doubt", d: "easy" },
+    { word: "SAIL", hint: "Cloth catching the invisible", d: "easy" },
+    { word: "ROPE", hint: "Strength woven from weakness", d: "easy" },
+    { word: "HOOK", hint: "Question mark of steel", d: "easy" },
+    { word: "LAMP", hint: "Darkness held at distance", d: "easy" },
+    { word: "DESK", hint: "Where work waits patiently", d: "easy" },
+    { word: "BOOK", hint: "Dead trees holding living thoughts", d: "easy" },
+    { word: "PAGE", hint: "A field where ideas graze", d: "easy" },
+    { word: "WORD", hint: "Thought dressed for company", d: "easy" },
+    { word: "NAME", hint: "Sound that makes you turn", d: "easy" },
+    { word: "FACE", hint: "The story you can't hide", d: "easy" },
+    { word: "HAND", hint: "Five-fingered problem solver", d: "easy" },
+    { word: "FOOT", hint: "Knows every floor", d: "easy" },
+    { word: "BONE", hint: "Scaffold under the skin", d: "easy" },
+    { word: "HAIR", hint: "Forest on your head", d: "easy" },
+    { word: "TEAR", hint: "Sadness finding the exit", d: "easy" },
+    { word: "KISS", hint: "Conversation without words", d: "easy" },
+    { word: "LOVE", hint: "Four letters meaning everything", d: "easy" },
+    { word: "FEAR", hint: "Mind's uninvited guest", d: "easy" },
+    { word: "HOPE", hint: "Tomorrow's down payment", d: "easy" },
+    { word: "CALM", hint: "Sea between storms", d: "easy" },
+    { word: "WARM", hint: "Cold's opposite, comfort's friend", d: "easy" },
+    { word: "COOL", hint: "Heat stepping back politely", d: "easy" },
+    { word: "DARK", hint: "Where light forgets to go", d: "easy" },
+    { word: "BLUE", hint: "Color the sky chose", d: "easy" },
+    { word: "PINK", hint: "Red after a deep breath", d: "easy" },
+    { word: "GIFT", hint: "Kindness wrapped in paper", d: "easy" },
+    { word: "WISH", hint: "Want with hope attached", d: "easy" },
+    // Easy 5-letter (150)
+    { word: "GRACE", hint: "Falls without stumbling", d: "easy" },
+    { word: "BLAZE", hint: "Too bright to look at", d: "easy" },
+    { word: "SWIFT", hint: "Gone before eyes could follow", d: "easy" },
+    { word: "LIGHT", hint: "The first thing, still fastest", d: "easy" },
+    { word: "MAPLE", hint: "Turns gold when summer ends", d: "easy" },
+    { word: "THORN", hint: "Beauty's quiet warning", d: "easy" },
+    { word: "OLIVE", hint: "Fruit that survived empires", d: "easy" },
+    { word: "EMBER", hint: "Fire remembering itself", d: "easy" },
+    { word: "GLOOM", hint: "Darkness with mood attached", d: "easy" },
+    { word: "JEWEL", hint: "Earth's vanity, worn by others", d: "easy" },
+    { word: "NERVE", hint: "Thread between feeling and doing", d: "easy" },
+    { word: "SNARE", hint: "Set before prey suspects", d: "easy" },
+    { word: "VIVID", hint: "Color refusing to apologize", d: "easy" },
+    { word: "BRISK", hint: "Cold air with something to prove", d: "easy" },
+    { word: "CHORD", hint: "Three notes discovering they agree", d: "easy" },
+    { word: "OCEAN", hint: "More water than land dreams of", d: "easy" },
+    { word: "RIVER", hint: "Water that knows where it's going", d: "easy" },
+    { word: "CREEK", hint: "River still learning to speak", d: "easy" },
+    { word: "BROOK", hint: "Water humming downhill", d: "easy" },
+    { word: "CLOUD", hint: "Water pretending to be sky", d: "easy" },
+    { word: "STORM", hint: "Sky throwing a tantrum", d: "easy" },
+    { word: "FROST", hint: "Cold leaving fingerprints", d: "easy" },
+    { word: "FLAME", hint: "Light that bites back", d: "easy" },
+    { word: "SMOKE", hint: "Fire's ghost rising", d: "easy" },
+    { word: "STEAM", hint: "Water excited beyond itself", d: "easy" },
+    { word: "STONE", hint: "Earth compressed into permanence", d: "easy" },
+    { word: "CLIFF", hint: "Land refusing to continue", d: "easy" },
+    { word: "SLOPE", hint: "Earth's way of saying maybe", d: "easy" },
+    { word: "GRASS", hint: "Green carpet never stops growing", d: "easy" },
+    { word: "WHEAT", hint: "Gold that feeds, not corrupts", d: "easy" },
+    { word: "GRAIN", hint: "Seed's final form before table", d: "easy" },
+    { word: "FLOUR", hint: "Wheat's powder form", d: "easy" },
+    { word: "BREAD", hint: "What civilizations build upon", d: "easy" },
+    { word: "HONEY", hint: "Sweetness that never spoils", d: "easy" },
+    { word: "SUGAR", hint: "Sweetness in crystal form", d: "easy" },
+    { word: "CREAM", hint: "Milk's richer cousin", d: "easy" },
+    { word: "FRUIT", hint: "Seeds in sweet disguise", d: "easy" },
+    { word: "APPLE", hint: "Fruit that started trouble", d: "easy" },
+    { word: "GRAPE", hint: "Wine still on the vine", d: "easy" },
+    { word: "LEMON", hint: "Sunshine that makes you pucker", d: "easy" },
+    { word: "PEACH", hint: "Summer's fuzzy secret", d: "easy" },
+    { word: "BERRY", hint: "Nature's candy, bite-sized", d: "easy" },
+    { word: "MELON", hint: "Summer refreshment, oversized", d: "easy" },
+    { word: "ONION", hint: "Layers that make you cry", d: "easy" },
+    { word: "STEAK", hint: "Carnivore's dream meal", d: "easy" },
+    { word: "BACON", hint: "Breakfast's best argument", d: "easy" },
+    { word: "TOAST", hint: "Bread's second chance", d: "easy" },
+    { word: "JUICE", hint: "Fruit in liquid form", d: "easy" },
+    { word: "WATER", hint: "Life's basic ingredient", d: "easy" },
+    { word: "GLASS", hint: "Sand that learned transparency", d: "easy" },
+    { word: "PLATE", hint: "Where food waits for forks", d: "easy" },
+    { word: "SPOON", hint: "Gentlest way to eat soup", d: "easy" },
+    { word: "KNIFE", hint: "Sharp edge with a handle", d: "easy" },
+    { word: "TABLE", hint: "Where families gather", d: "easy" },
+    { word: "CHAIR", hint: "Where sitting becomes official", d: "easy" },
+    { word: "COUCH", hint: "Where comfort takes a nap", d: "easy" },
+    { word: "FLOOR", hint: "Ground that came inside", d: "easy" },
+    { word: "STAIR", hint: "Ladder in disguise", d: "easy" },
+    { word: "TOWER", hint: "Ambition measured in floors", d: "easy" },
+    { word: "HOUSE", hint: "Walls that know your secrets", d: "easy" },
+    { word: "CABIN", hint: "House that chose the forest", d: "easy" },
+    { word: "FENCE", hint: "Wall you can see through", d: "easy" },
+    { word: "BRICK", hint: "Clay that went to school", d: "easy" },
+    { word: "STEEL", hint: "Iron that went to the gym", d: "easy" },
+    { word: "PEARL", hint: "Sand an oyster couldn't forget", d: "easy" },
+    { word: "CORAL", hint: "Tiny animals building cities", d: "easy" },
+    { word: "SHELL", hint: "Sea creature's abandoned house", d: "easy" },
+    { word: "WHALE", hint: "Ocean's gentle giant", d: "easy" },
+    { word: "SHARK", hint: "Teeth with fins attached", d: "easy" },
+    { word: "EAGLE", hint: "Pride with wings", d: "easy" },
+    { word: "ROBIN", hint: "Spring's cheerful announcement", d: "easy" },
+    { word: "HORSE", hint: "Freedom with four legs", d: "easy" },
+    { word: "TIGER", hint: "Stripes that mean danger", d: "easy" },
+    { word: "ZEBRA", hint: "Horse that chose to stand out", d: "easy" },
+    { word: "SNAKE", hint: "Rope that bites", d: "easy" },
+    { word: "MOUSE", hint: "Small enough to go unnoticed", d: "easy" },
+    { word: "SHEEP", hint: "Clouds with legs", d: "easy" },
+    { word: "PUPPY", hint: "Joy with four paws", d: "easy" },
+    { word: "SMILE", hint: "Happiness wearing your face", d: "easy" },
+    { word: "LAUGH", hint: "Joy escaping through sound", d: "easy" },
+    { word: "DREAM", hint: "Stories sleeping mind tells", d: "easy" },
+    { word: "SLEEP", hint: "Little death that refreshes", d: "easy" },
+    { word: "AWAKE", hint: "Sleep's opposite", d: "easy" },
+    { word: "HEART", hint: "Drum that never stops", d: "easy" },
+    { word: "BRAIN", hint: "Universe understanding itself", d: "easy" },
+    { word: "BLOOD", hint: "River running through you", d: "easy" },
+    { word: "VOICE", hint: "Sound of being human", d: "easy" },
+    { word: "SIGHT", hint: "Light turned to understanding", d: "easy" },
+    { word: "SOUND", hint: "Air carrying meaning", d: "easy" },
+    { word: "TASTE", hint: "Flavor registered", d: "easy" },
+    { word: "SMELL", hint: "Memory's secret trigger", d: "easy" },
+    { word: "TOUCH", hint: "Skin meeting the world", d: "easy" },
+    { word: "CHILD", hint: "Question that walks and talks", d: "easy" },
+    { word: "YOUTH", hint: "Time before time matters", d: "easy" },
+    { word: "ADULT", hint: "Child who learned to pretend", d: "easy" },
+    { word: "BRIDE", hint: "Love dressed in white", d: "easy" },
+    { word: "CROWD", hint: "Many becoming one", d: "easy" },
+    { word: "ALONE", hint: "One, by choice or not", d: "easy" },
+    { word: "PEACE", hint: "What remains when conflict leaves", d: "easy" },
+    { word: "TRUST", hint: "Faith placed in another", d: "easy" },
+    { word: "TRUTH", hint: "What facts aspire to be", d: "easy" },
+    { word: "HONOR", hint: "Reputation money can't buy", d: "easy" },
+    { word: "PRIDE", hint: "Self-worth on display", d: "easy" },
+    { word: "SHAME", hint: "Pride's uncomfortable twin", d: "easy" },
+    { word: "ANGER", hint: "Heat behind the eyes", d: "easy" },
+    { word: "GRIEF", hint: "Love with nowhere to go", d: "easy" },
+    { word: "HAPPY", hint: "Feeling everyone chases", d: "easy" },
+    { word: "TIRED", hint: "Energy's absence notice", d: "easy" },
+    { word: "READY", hint: "Prepared and waiting", d: "easy" },
+    { word: "BRAVE", hint: "Fear that showed up anyway", d: "easy" },
+    { word: "QUIET", hint: "Sound taking a break", d: "easy" },
+    { word: "QUICK", hint: "Speed as personality", d: "easy" },
+    { word: "SHARP", hint: "Edge meaning business", d: "easy" },
+    { word: "SWEET", hint: "Sugar's personality", d: "easy" },
+    { word: "FRESH", hint: "New enough to notice", d: "easy" },
+    { word: "CLEAN", hint: "Dirt's opposite", d: "easy" },
+    { word: "SHINY", hint: "Light's favorite surface", d: "easy" },
+    { word: "EMPTY", hint: "Full of nothing", d: "easy" },
+    { word: "WHOLE", hint: "All pieces together", d: "easy" },
+    { word: "FIRST", hint: "Before everyone else", d: "easy" },
+    { word: "FINAL", hint: "Last word on the matter", d: "easy" },
+    { word: "EARLY", hint: "Time being eager", d: "easy" },
+    { word: "TODAY", hint: "Only day you can live", d: "easy" },
+    { word: "NIGHT", hint: "When sun goes elsewhere", d: "easy" },
+    { word: "NORTH", hint: "Where compasses point", d: "easy" },
+    { word: "SOUTH", hint: "North's warmer opposite", d: "easy" },
+    { word: "SUNNY", hint: "Weather wearing a smile", d: "easy" },
+    { word: "RAINY", hint: "Sky feeling generous", d: "easy" },
+    { word: "WINDY", hint: "Air in a hurry", d: "easy" },
+    { word: "SNOWY", hint: "Winter getting serious", d: "easy" },
+    { word: "CLEAR", hint: "Nothing in the way", d: "easy" },
+    { word: "MISTY", hint: "Air wearing a veil", d: "easy" },
+    { word: "THICK", hint: "More than enough density", d: "easy" },
+    { word: "ROUND", hint: "Shape with no corners", d: "easy" },
+    { word: "SOLID", hint: "Not going anywhere", d: "easy" },
+    { word: "LOOSE", hint: "Tight letting go", d: "easy" },
+    { word: "TIGHT", hint: "No room to wiggle", d: "easy" },
+    { word: "ROUGH", hint: "Smooth's opposite", d: "easy" },
+    { word: "PLAIN", hint: "Simple without apology", d: "easy" },
+    { word: "FANCY", hint: "Plain dressed up", d: "easy" },
+    { word: "YOUNG", hint: "Age still counting up", d: "easy" },
+    { word: "GIANT", hint: "Big beyond normal", d: "easy" },
+    { word: "SMALL", hint: "Big's humble cousin", d: "easy" },
+    { word: "LUCKY", hint: "Chance being kind", d: "easy" },
+    // Easy 6-letter (150)
+    { word: "THRIVE", hint: "Blooming in difficulty", d: "easy" },
+    { word: "GENTLE", hint: "Strength choosing kindness", d: "easy" },
+    { word: "FIERCE", hint: "Intensity skipping warm-up", d: "easy" },
+    { word: "HUMBLE", hint: "Worth not announced", d: "easy" },
+    { word: "TENDER", hint: "Soft where it counts", d: "easy" },
+    { word: "SORROW", hint: "Weight love leaves behind", d: "easy" },
+    { word: "VANISH", hint: "There, then completely not", d: "easy" },
+    { word: "WANDER", hint: "Walking without asking directions", d: "easy" },
+    { word: "BEACON", hint: "Light with a job in darkness", d: "easy" },
+    { word: "MORTAL", hint: "Alive with an expiry date", d: "easy" },
+    { word: "GARDEN", hint: "Nature given an address", d: "easy" },
+    { word: "FLOWER", hint: "Plant's way of showing off", d: "easy" },
+    { word: "SPRING", hint: "Earth waking up and stretching", d: "easy" },
+    { word: "SUMMER", hint: "Season that stays too long", d: "easy" },
+    { word: "AUTUMN", hint: "Trees getting ready for bed", d: "easy" },
+    { word: "WINTER", hint: "Nature pressing pause", d: "easy" },
+    { word: "SUNDAY", hint: "Week catching its breath", d: "easy" },
+    { word: "MONDAY", hint: "Week rolling up sleeves", d: "easy" },
+    { word: "FRIDAY", hint: "Door to two days of freedom", d: "easy" },
+    { word: "MINUTE", hint: "Sixty seconds wearing a watch", d: "easy" },
+    { word: "SECOND", hint: "Time's smallest visible slice", d: "easy" },
+    { word: "SUNSET", hint: "Sky's daily masterpiece", d: "easy" },
+    { word: "SHADOW", hint: "Dark echo of light's absence", d: "easy" },
+    { word: "MIRROR", hint: "Glass telling the truth", d: "easy" },
+    { word: "WINDOW", hint: "Wall's way of looking outside", d: "easy" },
+    { word: "BRIDGE", hint: "How two sides meet", d: "easy" },
+    { word: "TUNNEL", hint: "Hole that goes somewhere", d: "easy" },
+    { word: "ISLAND", hint: "Land that kept to itself", d: "easy" },
+    { word: "FOREST", hint: "Trees holding a convention", d: "easy" },
+    { word: "JUNGLE", hint: "Forest refusing to be tamed", d: "easy" },
+    { word: "DESERT", hint: "Land where rain forgot", d: "easy" },
+    { word: "VALLEY", hint: "Land mountains protect", d: "easy" },
+    { word: "MEADOW", hint: "Grass having a good day", d: "easy" },
+    { word: "STREAM", hint: "River that hasn't grown up", d: "easy" },
+    { word: "PUDDLE", hint: "Rain that didn't make it far", d: "easy" },
+    { word: "THRONE", hint: "Chair with delusions", d: "easy" },
+    { word: "CASTLE", hint: "House with boundary issues", d: "easy" },
+    { word: "PALACE", hint: "Where comfort meets excess", d: "easy" },
+    { word: "TEMPLE", hint: "Where humans reach for divine", d: "easy" },
+    { word: "CHURCH", hint: "Faith under a roof", d: "easy" },
+    { word: "SCHOOL", hint: "Where questions become answers", d: "easy" },
+    { word: "MARKET", hint: "Where everything has a price", d: "easy" },
+    { word: "MUSEUM", hint: "Where past lives rent-free", d: "easy" },
+    { word: "COFFEE", hint: "Morning's best friend", d: "easy" },
+    { word: "BUTTER", hint: "What bread was waiting for", d: "easy" },
+    { word: "CHEESE", hint: "Milk's long strange trip", d: "easy" },
+    { word: "PEPPER", hint: "Spice that makes you sneeze", d: "easy" },
+    { word: "GARLIC", hint: "Flavor that announces itself", d: "easy" },
+    { word: "GINGER", hint: "Heat that tingles", d: "easy" },
+    { word: "ORANGE", hint: "Color and fruit sharing name", d: "easy" },
+    { word: "BANANA", hint: "Yellow curve of sweetness", d: "easy" },
+    { word: "CHERRY", hint: "Red jewel on a stem", d: "easy" },
+    { word: "TOMATO", hint: "Fruit at the vegetable party", d: "easy" },
+    { word: "POTATO", hint: "Comfort food's building block", d: "easy" },
+    { word: "CARROT", hint: "Orange root rabbits love", d: "easy" },
+    { word: "CELERY", hint: "Crunchy water in stick form", d: "easy" },
+    { word: "RADISH", hint: "Small root with big opinions", d: "easy" },
+    { word: "OYSTER", hint: "Ocean's treasure chest", d: "easy" },
+    { word: "SALMON", hint: "Fish remembering home", d: "easy" },
+    { word: "TURKEY", hint: "Thanksgiving's guest of honor", d: "easy" },
+    { word: "RABBIT", hint: "Ears longer than caution", d: "easy" },
+    { word: "MONKEY", hint: "Humans' playful cousin", d: "easy" },
+    { word: "DONKEY", hint: "Stubbornness with four legs", d: "easy" },
+    { word: "PARROT", hint: "Colorful mimic of skies", d: "easy" },
+    { word: "SPIDER", hint: "Eight legs weaving silk", d: "easy" },
+    { word: "BEETLE", hint: "Armor on six legs", d: "easy" },
+    { word: "LIZARD", hint: "Cold blood, quick feet", d: "easy" },
+    { word: "TURTLE", hint: "Patience wearing a shell", d: "easy" },
+    { word: "PIGEON", hint: "City bird with no shame", d: "easy" },
+    { word: "FALCON", hint: "Speed diving from sky", d: "easy" },
+    { word: "KITTEN", hint: "Mischief wrapped in fur", d: "easy" },
+    { word: "ANIMAL", hint: "Life without words", d: "easy" },
+    { word: "DRAGON", hint: "Fire breathing legend", d: "easy" },
+    { word: "PLANET", hint: "Rock or gas circling star", d: "easy" },
+    { word: "GALAXY", hint: "Stars in the billions", d: "easy" },
+    { word: "ROCKET", hint: "Humanity reaching for stars", d: "easy" },
+    { word: "METEOR", hint: "Space rock with places to be", d: "easy" },
+    { word: "BREEZE", hint: "Wind being polite", d: "easy" },
+    { word: "CANDLE", hint: "Fire domesticated", d: "easy" },
+    { word: "PILLOW", hint: "Where tired heads rest", d: "easy" },
+    { word: "CARPET", hint: "Floor wearing clothes", d: "easy" },
+    { word: "CLOSET", hint: "Where clothes wait in dark", d: "easy" },
+    { word: "DRAWER", hint: "Box that slides", d: "easy" },
+    { word: "BASKET", hint: "Container woven willing", d: "easy" },
+    { word: "BOTTLE", hint: "Glass holding liquid hostage", d: "easy" },
+    { word: "BUCKET", hint: "Container for liquids and dreams", d: "easy" },
+    { word: "PENCIL", hint: "Wood around graphite dreams", d: "easy" },
+    { word: "ERASER", hint: "Second chances in rubber", d: "easy" },
+    { word: "LETTER", hint: "Message waiting for stamp", d: "easy" },
+    { word: "CAMERA", hint: "Memory preservation device", d: "easy" },
+    { word: "TICKET", hint: "Permission in paper form", d: "easy" },
+    { word: "WALLET", hint: "Where money lives between buys", d: "easy" },
+    { word: "PUZZLE", hint: "Chaos waiting to be solved", d: "easy" },
+    { word: "RHYTHM", hint: "Pattern making you move", d: "easy" },
+    { word: "MELODY", hint: "Notes telling a story", d: "easy" },
+    { word: "SINGER", hint: "Voice as instrument", d: "easy" },
+    { word: "DANCER", hint: "Body speaking without words", d: "easy" },
+    { word: "ARTIST", hint: "Making invisible visible", d: "easy" },
+    { word: "WRITER", hint: "Words arranged with purpose", d: "easy" },
+    { word: "READER", hint: "Eyes consuming stories", d: "easy" },
+    { word: "PLAYER", hint: "One who plays the game", d: "easy" },
+    { word: "WINNER", hint: "Who remains when game ends", d: "easy" },
+    { word: "FRIEND", hint: "Family you chose yourself", d: "easy" },
+    { word: "MOTHER", hint: "First home you ever knew", d: "easy" },
+    { word: "FATHER", hint: "Strength wearing soft spot", d: "easy" },
+    { word: "SISTER", hint: "Built-in best friend or rival", d: "easy" },
+    { word: "COUSIN", hint: "Family at arm's length", d: "easy" },
+    { word: "PEOPLE", hint: "Humans in plural", d: "easy" },
+    { word: "PERSON", hint: "One human, infinitely complex", d: "easy" },
+    { word: "WONDER", hint: "Amazement asking questions", d: "easy" },
+    { word: "WISDOM", hint: "Knowledge that took time", d: "easy" },
+    { word: "MEMORY", hint: "Past filed away", d: "easy" },
+    { word: "MOMENT", hint: "Time small enough to hold", d: "easy" },
+    { word: "CHANGE", hint: "The only constant", d: "easy" },
+    { word: "CHANCE", hint: "Possibility knocking", d: "easy" },
+    { word: "CHOICE", hint: "Freedom in action", d: "easy" },
+    { word: "ANSWER", hint: "What questions seek", d: "easy" },
+    { word: "SECRET", hint: "Truth that went hiding", d: "easy" },
+    { word: "SIMPLE", hint: "Complexity shed its layers", d: "easy" },
+    { word: "DOUBLE", hint: "One times two", d: "easy" },
+    { word: "SINGLE", hint: "One standing alone", d: "easy" },
+    { word: "MIDDLE", hint: "Neither here nor there", d: "easy" },
+    { word: "CIRCLE", hint: "Line that never ends", d: "easy" },
+    { word: "SQUARE", hint: "Four sides that agree", d: "easy" },
+    { word: "GOLDEN", hint: "Color of wealth and autumn", d: "easy" },
+    { word: "PURPLE", hint: "Royal, mixing red and blue", d: "easy" },
+    { word: "YELLOW", hint: "Sunshine in a crayon", d: "easy" },
+    { word: "SILVER", hint: "Gray that sparkles", d: "easy" },
+    { word: "SMOOTH", hint: "Rough's well-mannered opposite", d: "easy" },
+    { word: "STRONG", hint: "Weakness overcome", d: "easy" },
+    { word: "BRIGHT", hint: "Dark's enthusiastic opposite", d: "easy" },
+    { word: "SILENT", hint: "Sound holding breath", d: "easy" },
+    { word: "HIDDEN", hint: "There but unseeable", d: "easy" },
+    { word: "BROKEN", hint: "Whole interrupted", d: "easy" },
+    { word: "FROZEN", hint: "Cold that stopped time", d: "easy" },
+    { word: "FLYING", hint: "Falling that forgot to land", d: "easy" },
+    { word: "MOVING", hint: "Stillness defeated", d: "easy" },
+    { word: "ENDING", hint: "Where stories stop", d: "easy" },
+    { word: "HOPING", hint: "Wanting with faith attached", d: "easy" },
+    { word: "LOVING", hint: "Heart in action", d: "easy" },
+    { word: "GIVING", hint: "Having that lets go", d: "easy" },
+    { word: "LIVING", hint: "Being, actively", d: "easy" },
+    { word: "HONEST", hint: "Truth's best friend", d: "easy" },
+    { word: "CLEVER", hint: "Smart that moves fast", d: "easy" },
+    { word: "HUNGRY", hint: "Empty asking to be filled", d: "easy" },
+    { word: "SLEEPY", hint: "Awake barely holding on", d: "easy" },
+    
+    // MEDIUM WORDS (400)
+    // Medium 4-letter (80)
+    { word: "SAGE", hint: "Both wise man and his garden", d: "medium" },
+    { word: "OPAL", hint: "Trapped rainbows in stone disguise", d: "medium" },
+    { word: "JADE", hint: "Emperors traded kingdoms for its shade", d: "medium" },
+    { word: "VIBE", hint: "Felt before a word is spoken", d: "medium" },
+    { word: "EPIC", hint: "Too big for a single breath", d: "medium" },
+    { word: "ICON", hint: "Outlives the person it once was", d: "medium" },
+    { word: "WISP", hint: "Gone before you're sure you saw it", d: "medium" },
+    { word: "ROAM", hint: "No destination, no regrets", d: "medium" },
+    { word: "RARE", hint: "Seen once, remembered forever", d: "medium" },
+    { word: "PURE", hint: "Nothing added, nothing taken", d: "medium" },
+    { word: "VAST", hint: "Eyes run out before land does", d: "medium" },
+    { word: "NOIR", hint: "Shadow with a story to tell", d: "medium" },
+    { word: "VALE", hint: "Quiet land mountains protect", d: "medium" },
+    { word: "HAZE", hint: "World seen through closed eyes", d: "medium" },
+    { word: "IRIS", hint: "Colored gate pupil hides behind", d: "medium" },
+    { word: "PYRE", hint: "Fire given purpose beyond warmth", d: "medium" },
+    { word: "VEIL", hint: "Truth wearing something thin", d: "medium" },
+    { word: "ZEAL", hint: "Belief that forgot to pace itself", d: "medium" },
+    { word: "BOON", hint: "Gift arriving exactly when needed", d: "medium" },
+    { word: "LULL", hint: "Pause between two storms", d: "medium" },
+    { word: "MOOR", hint: "Land belonging to the fog", d: "medium" },
+    { word: "WANE", hint: "Moon slowly forgetting itself", d: "medium" },
+    { word: "APEX", hint: "Where up has nowhere else to go", d: "medium" },
+    { word: "BARD", hint: "Words sung rather than spoken", d: "medium" },
+    { word: "COVE", hint: "Ocean's quiet corner", d: "medium" },
+    { word: "DAZE", hint: "Awareness taking a vacation", d: "medium" },
+    { word: "EDDY", hint: "Water that forgot which way", d: "medium" },
+    { word: "FRAY", hint: "Where order unravels", d: "medium" },
+    { word: "GLEN", hint: "Valley that kept its secret", d: "medium" },
+    { word: "HUSK", hint: "What's left when inside leaves", d: "medium" },
+    { word: "JINX", hint: "Bad luck given a name", d: "medium" },
+    { word: "KEEL", hint: "Backbone of something that floats", d: "medium" },
+    { word: "LORE", hint: "Knowledge wrapped in legend", d: "medium" },
+    { word: "MURK", hint: "Darkness you can almost touch", d: "medium" },
+    { word: "NULL", hint: "The value of nothing", d: "medium" },
+    { word: "OMEN", hint: "Future sending a warning", d: "medium" },
+    { word: "PACT", hint: "Promise sealed between two", d: "medium" },
+    { word: "QUAY", hint: "Where ships kiss the shore", d: "medium" },
+    { word: "RAZE", hint: "To unmake completely", d: "medium" },
+    { word: "SILT", hint: "What rivers remember", d: "medium" },
+    { word: "TOIL", hint: "Work that costs you", d: "medium" },
+    { word: "VOID", hint: "Empty that goes forever", d: "medium" },
+    { word: "WARY", hint: "Trust with its guard up", d: "medium" },
+    { word: "ZEST", hint: "Life lived at full flavor", d: "medium" },
+    { word: "ALMS", hint: "Charity from open hands", d: "medium" },
+    { word: "BALM", hint: "Comfort in a small container", d: "medium" },
+    { word: "CRAG", hint: "Rock that refused to smooth", d: "medium" },
+    { word: "DELL", hint: "Small valley keeping secrets", d: "medium" },
+    { word: "GILD", hint: "Covering truth in gold", d: "medium" },
+    { word: "HELM", hint: "Where direction is decided", d: "medium" },
+    { word: "JILT", hint: "Love withdrawn suddenly", d: "medium" },
+    { word: "KELP", hint: "Forest that lives underwater", d: "medium" },
+    { word: "LAIR", hint: "Where danger sleeps", d: "medium" },
+    { word: "OPUS", hint: "Work that defines a life", d: "medium" },
+    { word: "PIER", hint: "Bridge that goes partway", d: "medium" },
+    { word: "REND", hint: "Tear with violence", d: "medium" },
+    { word: "SERE", hint: "Dry enough to crumble", d: "medium" },
+    { word: "TEEM", hint: "Full to overflowing", d: "medium" },
+    { word: "WELD", hint: "Metal joined by fire", d: "medium" },
+    { word: "YOKE", hint: "What binds two for work", d: "medium" },
+    { word: "BILE", hint: "Bitterness stored inside", d: "medium" },
+    { word: "CLAD", hint: "Dressed but barely", d: "medium" },
+    { word: "DEFT", hint: "Skilled without showing off", d: "medium" },
+    { word: "FEAT", hint: "Achievement worth noting", d: "medium" },
+    { word: "GRIT", hint: "Determination that won't quit", d: "medium" },
+    { word: "HEWN", hint: "Shaped by force", d: "medium" },
+    { word: "IDOL", hint: "Worship given form", d: "medium" },
+    { word: "JEST", hint: "Truth disguised as humor", d: "medium" },
+    { word: "LEVY", hint: "Tax demanded by authority", d: "medium" },
+    { word: "MELD", hint: "Two becoming one smoothly", d: "medium" },
+    { word: "NAPE", hint: "Where neck meets vulnerability", d: "medium" },
+    { word: "PANG", hint: "Sharp feeling, quickly gone", d: "medium" },
+    { word: "RIFT", hint: "Gap where unity once was", d: "medium" },
+    { word: "SECT", hint: "Belief that branched away", d: "medium" },
+    { word: "TIER", hint: "Level in a hierarchy", d: "medium" },
+    { word: "VEER", hint: "Change direction suddenly", d: "medium" },
+    { word: "WRIT", hint: "Law written and binding", d: "medium" },
+    { word: "YARN", hint: "Story or thread, both spin", d: "medium" },
+    { word: "ZINC", hint: "Metal that prevents rust", d: "medium" },
+    // Medium 5-letter (160)
+    { word: "FLAIR", hint: "Style that can't be bought", d: "medium" },
+    { word: "HAVEN", hint: "World stops at its door", d: "medium" },
+    { word: "LUCID", hint: "Dreaming but awake inside", d: "medium" },
+    { word: "PRISM", hint: "One ray in, rainbow out", d: "medium" },
+    { word: "QUEST", hint: "Journey that changes you", d: "medium" },
+    { word: "SHEEN", hint: "Light resting like a secret", d: "medium" },
+    { word: "DRIFT", hint: "Moving without asking where", d: "medium" },
+    { word: "QUIRK", hint: "Flaw that makes you memorable", d: "medium" },
+    { word: "SCORN", hint: "Contempt with posture", d: "medium" },
+    { word: "VIGOR", hint: "Energy that woke up early", d: "medium" },
+    { word: "ABODE", hint: "Where you hang your heart", d: "medium" },
+    { word: "BRINK", hint: "Edge before the fall", d: "medium" },
+    { word: "CREST", hint: "Wave's highest moment", d: "medium" },
+    { word: "DWELT", hint: "Lived there once", d: "medium" },
+    { word: "ELEGY", hint: "Song for what's gone", d: "medium" },
+    { word: "FJORD", hint: "Sea carved into mountains", d: "medium" },
+    { word: "GLYPH", hint: "Meaning carved in stone", d: "medium" },
+    { word: "HEIST", hint: "Theft with style", d: "medium" },
+    { word: "IVORY", hint: "White as elephant's pride", d: "medium" },
+    { word: "JOKER", hint: "Chaos wearing a smile", d: "medium" },
+    { word: "KNELL", hint: "Bell announcing endings", d: "medium" },
+    { word: "LITHE", hint: "Flexible as a question", d: "medium" },
+    { word: "MIRTH", hint: "Joy spilling over", d: "medium" },
+    { word: "NEXUS", hint: "Where all paths cross", d: "medium" },
+    { word: "PLUME", hint: "Feather or smoke rising proud", d: "medium" },
+    { word: "QUALM", hint: "Doubt arriving exactly too late", d: "medium" },
+    { word: "REALM", hint: "Kingdom of the mind", d: "medium" },
+    { word: "SEIZE", hint: "Taking without asking", d: "medium" },
+    { word: "TRYST", hint: "Meeting that kept secrets", d: "medium" },
+    { word: "USURP", hint: "Taking what wasn't offered", d: "medium" },
+    { word: "VAULT", hint: "Room that keeps secrets", d: "medium" },
+    { word: "WRATH", hint: "Anger that grew up", d: "medium" },
+    { word: "YIELD", hint: "Strength choosing to step aside", d: "medium" },
+    { word: "AZURE", hint: "Sky at its bluest", d: "medium" },
+    { word: "BALMY", hint: "Warm like kindness", d: "medium" },
+    { word: "CACHE", hint: "Hidden where only you know", d: "medium" },
+    { word: "EERIE", hint: "Strange enough to shiver", d: "medium" },
+    { word: "FEIGN", hint: "Truth wearing a mask", d: "medium" },
+    { word: "GUILE", hint: "Cleverness without conscience", d: "medium" },
+    { word: "HAUNT", hint: "Presence that won't leave", d: "medium" },
+    { word: "INERT", hint: "Still, by choice or force", d: "medium" },
+    { word: "JAUNT", hint: "Travel light, travel happy", d: "medium" },
+    { word: "KARMA", hint: "Actions echoing back", d: "medium" },
+    { word: "LUNAR", hint: "Belonging to the night light", d: "medium" },
+    { word: "MOTIF", hint: "Pattern repeating with meaning", d: "medium" },
+    { word: "NAIVE", hint: "Innocence not yet tested", d: "medium" },
+    { word: "ONSET", hint: "Beginning that means business", d: "medium" },
+    { word: "PIOUS", hint: "Faith worn on the sleeve", d: "medium" },
+    { word: "QUOTA", hint: "Limit set by someone else", d: "medium" },
+    { word: "ROOST", hint: "Where wings rest", d: "medium" },
+    { word: "STOIC", hint: "Feeling without flinching", d: "medium" },
+    { word: "TACIT", hint: "Understood without words", d: "medium" },
+    { word: "URBAN", hint: "Where nature built over", d: "medium" },
+    { word: "VENOM", hint: "Poison with purpose", d: "medium" },
+    { word: "WIELD", hint: "Hold with intention", d: "medium" },
+    { word: "YEARN", hint: "Want that won't quit", d: "medium" },
+    { word: "ZESTY", hint: "Life at full volume", d: "medium" },
+    { word: "ADEPT", hint: "Skilled beyond teaching", d: "medium" },
+    { word: "BRAWL", hint: "Fight without rules", d: "medium" },
+    { word: "CREED", hint: "Belief carved in stone", d: "medium" },
+    { word: "DREAD", hint: "Fear of what's coming", d: "medium" },
+    { word: "ETHER", hint: "Space between everything", d: "medium" },
+    { word: "FORGE", hint: "Where fire shapes metal", d: "medium" },
+    { word: "GRASP", hint: "Understanding held tight", d: "medium" },
+    { word: "HOARD", hint: "Having that won't share", d: "medium" },
+    { word: "INEPT", hint: "Skilled backwards", d: "medium" },
+    { word: "JOLLY", hint: "Happy without trying", d: "medium" },
+    { word: "KUDOS", hint: "Praise that was earned", d: "medium" },
+    { word: "LAPEL", hint: "Where opinions are pinned", d: "medium" },
+    { word: "MAUVE", hint: "Purple being shy", d: "medium" },
+    { word: "NOBLE", hint: "Worth without wealth", d: "medium" },
+    { word: "OPTIC", hint: "Related to seeing", d: "medium" },
+    { word: "PLEAD", hint: "Asking with everything", d: "medium" },
+    { word: "REBEL", hint: "No refusing to stay quiet", d: "medium" },
+    { word: "SAVOR", hint: "Tasting slowly", d: "medium" },
+    { word: "TEMPO", hint: "Speed of the heartbeat", d: "medium" },
+    { word: "UNIFY", hint: "Many becoming one", d: "medium" },
+    { word: "VERGE", hint: "Almost, but not yet", d: "medium" },
+    { word: "WREAK", hint: "Cause with fury", d: "medium" },
+    { word: "YACHT", hint: "Wealth floating", d: "medium" },
+    { word: "ALIBI", hint: "Story that proves innocence", d: "medium" },
+    { word: "BROOD", hint: "Thoughts circling dark drain", d: "medium" },
+    { word: "CLASP", hint: "Hold that means something", d: "medium" },
+    { word: "DIRGE", hint: "Music for goodbyes", d: "medium" },
+    { word: "ELATE", hint: "Joy lifting everything", d: "medium" },
+    { word: "FLORA", hint: "Green things collectively", d: "medium" },
+    { word: "GRAFT", hint: "Growth that borrowed", d: "medium" },
+    { word: "INANE", hint: "Empty of meaning", d: "medium" },
+    { word: "JUROR", hint: "Justice in ordinary clothes", d: "medium" },
+    { word: "KNAVE", hint: "Rogue with charm", d: "medium" },
+    { word: "LEMUR", hint: "Eyes bigger than judgment", d: "medium" },
+    { word: "MANOR", hint: "House with history", d: "medium" },
+    { word: "NICHE", hint: "Space that fits exactly", d: "medium" },
+    { word: "OASIS", hint: "Life where none should be", d: "medium" },
+    { word: "PLAIT", hint: "Hair braided with patience", d: "medium" },
+    { word: "QUERY", hint: "Question dressed formally", d: "medium" },
+    { word: "REGAL", hint: "Royal without trying", d: "medium" },
+    { word: "SIEGE", hint: "Patience weaponized", d: "medium" },
+    { word: "TRUCE", hint: "War taking a breath", d: "medium" },
+    { word: "VIGIL", hint: "Watching through darkness", d: "medium" },
+    { word: "WALTZ", hint: "Three-beat elegance", d: "medium" },
+    { word: "YEAST", hint: "Tiny life making bread rise", d: "medium" },
+    { word: "ARBOR", hint: "Trees arranged with purpose", d: "medium" },
+    { word: "BEGET", hint: "To cause to exist", d: "medium" },
+    { word: "DELVE", hint: "Digging for meaning", d: "medium" },
+    { word: "ENACT", hint: "Law becoming real", d: "medium" },
+    { word: "FROND", hint: "Leaf of tropical dreams", d: "medium" },
+    { word: "GLOAT", hint: "Joy at another's failure", d: "medium" },
+    { word: "HASTE", hint: "Speed that skips care", d: "medium" },
+    { word: "IMBUE", hint: "Fill with quality", d: "medium" },
+    { word: "JOUST", hint: "Honor on horseback", d: "medium" },
+    { word: "KHAKI", hint: "Color of dust and duty", d: "medium" },
+    { word: "LURCH", hint: "Move without grace", d: "medium" },
+    { word: "MOURN", hint: "Love refusing to let go", d: "medium" },
+    { word: "NOTCH", hint: "Small cut marking achievement", d: "medium" },
+    { word: "OUNCE", hint: "Weight almost too small", d: "medium" },
+    { word: "PROWL", hint: "Moving with intent", d: "medium" },
+    { word: "QUAFF", hint: "Drink with enthusiasm", d: "medium" },
+    { word: "SLOTH", hint: "Rest taken too far", d: "medium" },
+    { word: "TAINT", hint: "Purity slightly ruined", d: "medium" },
+    { word: "USHER", hint: "Guide through doorways", d: "medium" },
+    { word: "VISTA", hint: "View that takes breath", d: "medium" },
+    { word: "WAIVE", hint: "Rights given up willingly", d: "medium" },
+    { word: "YODEL", hint: "Voice bouncing off mountains", d: "medium" },
+    { word: "AMASS", hint: "Gather without stopping", d: "medium" },
+    { word: "BLURT", hint: "Words escaping unplanned", d: "medium" },
+    { word: "CLOUT", hint: "Influence without title", d: "medium" },
+    { word: "DOUSE", hint: "Water ending fire's reign", d: "medium" },
+    { word: "ENSUE", hint: "What follows naturally", d: "medium" },
+    { word: "FLUKE", hint: "Luck pretending to be skill", d: "medium" },
+    { word: "GOUGE", hint: "Remove with force", d: "medium" },
+    { word: "HEFTY", hint: "Weight you notice", d: "medium" },
+    { word: "IMPEL", hint: "Push from inside", d: "medium" },
+    { word: "JAZZY", hint: "Style with swing", d: "medium" },
+    { word: "KNACK", hint: "Skill that came naturally", d: "medium" },
+    { word: "LODGE", hint: "Shelter in wild places", d: "medium" },
+    { word: "MURAL", hint: "Story told on walls", d: "medium" },
+    { word: "OUTDO", hint: "Better than before", d: "medium" },
+    { word: "PARCH", hint: "Dry beyond thirst", d: "medium" },
+    { word: "QUELL", hint: "Calm with authority", d: "medium" },
+    { word: "SPURN", hint: "Reject with emphasis", d: "medium" },
+    { word: "TIARA", hint: "Crown for the almost royal", d: "medium" },
+    { word: "ULCER", hint: "Pain that stays", d: "medium" },
+    { word: "VALOR", hint: "Courage on display", d: "medium" },
+    { word: "WINCE", hint: "Pain shown briefly", d: "medium" },
+    { word: "XENON", hint: "Noble gas, stranger", d: "medium" },
+    { word: "YOUTH", hint: "Age before worry", d: "medium" },
+    { word: "ZONAL", hint: "Divided by lines", d: "medium" },
+    // Medium 6-letter (160)
+    { word: "ALLURE", hint: "Pulls closer without words", d: "medium" },
+    { word: "CANDOR", hint: "Truth before politeness edits", d: "medium" },
+    { word: "ELIXIR", hint: "One sip changes everything", d: "medium" },
+    { word: "IGNITE", hint: "Moment before everything's possible", d: "medium" },
+    { word: "LUSTER", hint: "Years polish instead of dull", d: "medium" },
+    { word: "ENIGMA", hint: "Understanding locked away", d: "medium" },
+    { word: "KINDLE", hint: "Small flame deciding to grow", d: "medium" },
+    { word: "ORACLE", hint: "Future in words present can't decode", d: "medium" },
+    { word: "ZENITH", hint: "Highest point arc reaches", d: "medium" },
+    { word: "BRAZEN", hint: "Bold forgetting shame", d: "medium" },
+    { word: "ABRUPT", hint: "Sudden without warning", d: "medium" },
+    { word: "BENIGN", hint: "Harmless but watching", d: "medium" },
+    { word: "CIPHER", hint: "Secret hiding in numbers", d: "medium" },
+    { word: "DEVOUT", hint: "Faith without question", d: "medium" },
+    { word: "EFFIGY", hint: "Hate given a shape", d: "medium" },
+    { word: "FERVOR", hint: "Belief that forgot to cool", d: "medium" },
+    { word: "GARNER", hint: "Gather bit by bit", d: "medium" },
+    { word: "HASTEN", hint: "Hurry with purpose", d: "medium" },
+    { word: "INVOKE", hint: "Call upon something greater", d: "medium" },
+    { word: "JOVIAL", hint: "Happy as a default", d: "medium" },
+    { word: "MARROW", hint: "Life hidden in bones", d: "medium" },
+    { word: "NIMBLE", hint: "Quick and clever footed", d: "medium" },
+    { word: "OBTUSE", hint: "Dull beyond sharpening", d: "medium" },
+    { word: "PLACID", hint: "Calm that runs deep", d: "medium" },
+    { word: "QUAINT", hint: "Old-fashioned but charming", d: "medium" },
+    { word: "REVERE", hint: "Respect approaching worship", d: "medium" },
+    { word: "SOMBER", hint: "Serious as shadows", d: "medium" },
+    { word: "TORPID", hint: "Slow beyond lazy", d: "medium" },
+    { word: "VERMIN", hint: "Unwanted life too close", d: "medium" },
+    { word: "WANTON", hint: "Free of all restraint", d: "medium" },
+    { word: "ZEALOT", hint: "Believer without limits", d: "medium" },
+    { word: "ARCADE", hint: "Games in a row", d: "medium" },
+    { word: "BEHOLD", hint: "See with importance", d: "medium" },
+    { word: "CHERUB", hint: "Heaven's smallest messenger", d: "medium" },
+    { word: "DEARTH", hint: "Not enough of everything", d: "medium" },
+    { word: "ERRANT", hint: "Wandering from the right path", d: "medium" },
+    { word: "FICKLE", hint: "Loyalty that changes easily", d: "medium" },
+    { word: "GENTRY", hint: "Birth above common", d: "medium" },
+    { word: "HERMIT", hint: "Solitude chosen first", d: "medium" },
+    { word: "INFAMY", hint: "Fame no one wants", d: "medium" },
+    { word: "JOSTLE", hint: "Push through the crowd", d: "medium" },
+    { word: "KERNEL", hint: "Truth at the center", d: "medium" },
+    { word: "LOATHE", hint: "Hate that goes deep", d: "medium" },
+    { word: "MORSEL", hint: "Bite worth savoring", d: "medium" },
+    { word: "NOVICE", hint: "Beginner with hope", d: "medium" },
+    { word: "ORDEAL", hint: "Test that breaks or makes", d: "medium" },
+    { word: "PARIAH", hint: "Belonging taken away", d: "medium" },
+    { word: "QUARRY", hint: "Hunted thing, stone or prey", d: "medium" },
+    { word: "RAVAGE", hint: "Destruction without mercy", d: "medium" },
+    { word: "SENTRY", hint: "Eyes that never close", d: "medium" },
+    { word: "UNWARY", hint: "Guard let down", d: "medium" },
+    { word: "WALLOW", hint: "Sink into feeling", d: "medium" },
+    { word: "CAVEAT", hint: "Warning before agreeing", d: "medium" },
+    { word: "DEBASE", hint: "Lower what was high", d: "medium" },
+    { word: "EMBARK", hint: "Begin with intention", d: "medium" },
+    { word: "GAMBIT", hint: "Risk that might reward", d: "medium" },
+    { word: "HERALD", hint: "Announcement with ceremony", d: "medium" },
+    { word: "INDICT", hint: "Accuse with authority", d: "medium" },
+    { word: "JARGON", hint: "Language only insiders know", d: "medium" },
+    { word: "LEGACY", hint: "What remains after leaving", d: "medium" },
+    { word: "MANTRA", hint: "Words repeated for power", d: "medium" },
+    { word: "NEGATE", hint: "Undo what was done", d: "medium" },
+    { word: "PONDER", hint: "Think with weight", d: "medium" },
+    { word: "QUIVER", hint: "Shake with emotion", d: "medium" },
+    { word: "RANCOR", hint: "Bitter that won't fade", d: "medium" },
+    { word: "SUBTLE", hint: "There but barely", d: "medium" },
+    { word: "TORQUE", hint: "Twist with power", d: "medium" },
+    { word: "UTOPIA", hint: "Perfect place that isn't", d: "medium" },
+    { word: "WAIVER", hint: "Rule bent just this once", d: "medium" },
+    { word: "ZEPHYR", hint: "Breeze gentle as whisper", d: "medium" },
+    { word: "ADHERE", hint: "Stick by choice", d: "medium" },
+    { word: "BLIGHT", hint: "Ruin spreading silently", d: "medium" },
+    { word: "COERCE", hint: "Force wearing politeness", d: "medium" },
+    { word: "DOCILE", hint: "Obedient without fight", d: "medium" },
+    { word: "ELICIT", hint: "Draw out carefully", d: "medium" },
+    { word: "FOIBLE", hint: "Weakness almost charming", d: "medium" },
+    { word: "HUBRIS", hint: "Pride before the fall", d: "medium" },
+    { word: "IMPAIR", hint: "Damage without destroying", d: "medium" },
+    { word: "JOCUND", hint: "Cheerful by nature", d: "medium" },
+    { word: "LAVISH", hint: "Too much on purpose", d: "medium" },
+    { word: "MALICE", hint: "Harm intended clearly", d: "medium" },
+    { word: "NESTLE", hint: "Settle in safely", d: "medium" },
+    { word: "OBLIGE", hint: "Duty accepted gracefully", d: "medium" },
+    { word: "PERUSE", hint: "Read with attention", d: "medium" },
+    { word: "QUORUM", hint: "Enough to decide", d: "medium" },
+    { word: "REBUKE", hint: "Scold with authority", d: "medium" },
+    { word: "SATIRE", hint: "Truth wearing humor", d: "medium" },
+    { word: "TENETS", hint: "Beliefs that define", d: "medium" },
+    { word: "UNCOUTH", hint: "Manners not learned", d: "medium" },
+    { word: "WRITHE", hint: "Move in pain", d: "medium" },
+    { word: "YONDER", hint: "There but far", d: "medium" },
+    { word: "ABJECT", hint: "Low beyond measure", d: "medium" },
+    { word: "BELLOW", hint: "Sound of deep feeling", d: "medium" },
+    { word: "CAJOLE", hint: "Sweet-talk into submission", d: "medium" },
+    { word: "DAWDLE", hint: "Slow on purpose", d: "medium" },
+    { word: "EFFACE", hint: "Rub out existence", d: "medium" },
+    { word: "FIASCO", hint: "Failure spectacular", d: "medium" },
+    { word: "GARISH", hint: "Too bright to ignore", d: "medium" },
+    { word: "HALLOW", hint: "Make sacred", d: "medium" },
+    { word: "IMBIBE", hint: "Drink in meaning", d: "medium" },
+    { word: "KISMET", hint: "Fate with acceptance", d: "medium" },
+    { word: "LAMENT", hint: "Sorrow given voice", d: "medium" },
+    { word: "MEDLEY", hint: "Mix without rules", d: "medium" },
+    { word: "OPAQUE", hint: "Light stopped entirely", d: "medium" },
+    { word: "PARLEY", hint: "Talk before fighting", d: "medium" },
+    { word: "QUENCH", hint: "Satisfy completely", d: "medium" },
+    { word: "RAMBLE", hint: "Walk without destination", d: "medium" },
+    { word: "SEETHE", hint: "Anger barely contained", d: "medium" },
+    { word: "THRALL", hint: "Held captive by fascination", d: "medium" },
+    { word: "UNFURL", hint: "Open with ceremony", d: "medium" },
+    { word: "VENEER", hint: "Thin layer hiding truth", d: "medium" },
+    { word: "WARDEN", hint: "Guardian with keys", d: "medium" },
+    { word: "ABLAZE", hint: "Fire winning everywhere", d: "medium" },
+    { word: "BEMOAN", hint: "Complain with feeling", d: "medium" },
+    { word: "CLIQUE", hint: "Group that excludes", d: "medium" },
+    { word: "DEBUNK", hint: "Prove false publicly", d: "medium" },
+    { word: "EVINCE", hint: "Show without showing off", d: "medium" },
+    { word: "FRUGAL", hint: "Careful with resources", d: "medium" },
+    { word: "GLOSSY", hint: "Shine that distracts", d: "medium" },
+    { word: "HOMAGE", hint: "Respect given visible", d: "medium" },
+    { word: "IMPISH", hint: "Mischief barely hidden", d: "medium" },
+    { word: "JESTER", hint: "Truth hiding in jokes", d: "medium" },
+    { word: "LITANY", hint: "List becoming prayer", d: "medium" },
+    { word: "MORBID", hint: "Death too interesting", d: "medium" },
+    { word: "NETHER", hint: "Below everything else", d: "medium" },
+    { word: "OSSIFY", hint: "Turn to bone or habit", d: "medium" },
+    { word: "PATHOS", hint: "Feeling stirred by suffering", d: "medium" },
+    { word: "RANSOM", hint: "Freedom for a price", d: "medium" },
+    { word: "SHREWD", hint: "Smart that sees through", d: "medium" },
+    { word: "TYCOON", hint: "Wealth that commands", d: "medium" },
+    { word: "UPHOLD", hint: "Keep standing against pressure", d: "medium" },
+    { word: "WAYLAY", hint: "Ambush with intent", d: "medium" },
+    { word: "ZEALOUS", hint: "Eager beyond measure", d: "medium" },
+    { word: "ASYLUM", hint: "Safety from the storm", d: "medium" },
+    { word: "BEGUILE", hint: "Charm into forgetting", d: "medium" },
+    { word: "CURSORY", hint: "Quick and careless look", d: "medium" },
+    { word: "DISMAL", hint: "Gloomy without hope", d: "medium" },
+    { word: "ELAPSE", hint: "Time passing quietly", d: "medium" },
+    { word: "FATHOM", hint: "Understand deeply", d: "medium" },
+    { word: "GANDER", hint: "Look taken casually", d: "medium" },
+    { word: "HAPLESS", hint: "Unlucky by nature", d: "medium" },
+    { word: "IRATE", hint: "Angry and showing it", d: "medium" },
+    { word: "JAGGED", hint: "Rough without apology", d: "medium" },
+    { word: "KINDRED", hint: "Related by spirit", d: "medium" },
+    { word: "LIMPID", hint: "Clear as untouched water", d: "medium" },
+    { word: "MEAGER", hint: "Not enough to satisfy", d: "medium" },
+    { word: "PALLID", hint: "Pale from within", d: "medium" },
+    { word: "QUASH", hint: "Suppress completely", d: "medium" },
+    { word: "RAMPANT", hint: "Growing without control", d: "medium" },
+    { word: "SAVVY", hint: "Smart about real things", d: "medium" },
+    { word: "TAWDRY", hint: "Cheap trying to be fancy", d: "medium" },
+    { word: "UNKEMPT", hint: "Grooming abandoned", d: "medium" },
+    { word: "VERBOSE", hint: "Words beyond necessary", d: "medium" },
+    
+    // HARD WORDS (200)
+    // Hard 4-letter (40)
+    { word: "ELAN", hint: "Grace with electricity in it", d: "hard" },
+    { word: "RUNE", hint: "Letter remembering older magic", d: "hard" },
+    { word: "TARN", hint: "Mountain's hidden mirror", d: "hard" },
+    { word: "NAVE", hint: "Spine of a cathedral", d: "hard" },
+    { word: "ONYX", hint: "Darkness hardened into stone", d: "hard" },
+    { word: "RIME", hint: "Frost writing on windowpanes", d: "hard" },
+    { word: "MESA", hint: "Plateau that refused mountain status", d: "hard" },
+    { word: "WICK", hint: "Thin thread between fire and wax", d: "hard" },
+    { word: "WREN", hint: "Small bird, enormous voice", d: "hard" },
+    { word: "BYRE", hint: "Where cattle sleep in old stories", d: "hard" },
+    { word: "GYRE", hint: "Spiral that knows no end", d: "hard" },
+    { word: "LYNX", hint: "Eyes that see through dark", d: "hard" },
+    { word: "MYNA", hint: "Bird that borrowed voices", d: "hard" },
+    { word: "ORYX", hint: "Horns straight as spears", d: "hard" },
+    { word: "SYNC", hint: "Together in perfect time", d: "hard" },
+    { word: "TZAR", hint: "Ruler spelled differently", d: "hard" },
+    { word: "YAWL", hint: "Boat with extra mast", d: "hard" },
+    { word: "BERM", hint: "Earth piled with purpose", d: "hard" },
+    { word: "DOIT", hint: "Coin worth almost nothing", d: "hard" },
+    { word: "ERNE", hint: "Eagle of the sea", d: "hard" },
+    { word: "FROE", hint: "Tool for splitting wood true", d: "hard" },
+    { word: "GIRT", hint: "Surrounded completely", d: "hard" },
+    { word: "HOLT", hint: "Small wood or grove", d: "hard" },
+    { word: "JIBS", hint: "Sails at the front", d: "hard" },
+    { word: "KERF", hint: "Cut made by saw", d: "hard" },
+    { word: "LEES", hint: "Dregs at the bottom", d: "hard" },
+    { word: "MIEN", hint: "Manner of appearance", d: "hard" },
+    { word: "NEBS", hint: "Beaks or noses", d: "hard" },
+    { word: "OAST", hint: "Kiln for hops", d: "hard" },
+    { word: "PAWL", hint: "Lever that clicks", d: "hard" },
+    { word: "QUOD", hint: "Prison in slang", d: "hard" },
+    { word: "REDE", hint: "Counsel or advice", d: "hard" },
+    { word: "SHIV", hint: "Makeshift blade", d: "hard" },
+    { word: "TRUG", hint: "Shallow gardening basket", d: "hard" },
+    { word: "UMPS", hint: "Game officials informally", d: "hard" },
+    { word: "VELD", hint: "African grassland", d: "hard" },
+    { word: "WOAD", hint: "Blue dye of ancient warriors", d: "hard" },
+    { word: "YAUP", hint: "Harsh cry", d: "hard" },
+    { word: "ZOON", hint: "Living thing in Greek", d: "hard" },
+    { word: "ANKH", hint: "Egyptian symbol of life", d: "hard" },
+    // Hard 5-letter (80)
+    { word: "FLINT", hint: "Strike it, dark surrenders", d: "hard" },
+    { word: "GRAZE", hint: "Barely touched, barely missed", d: "hard" },
+    { word: "LARVA", hint: "Creature before knowing what it'll become", d: "hard" },
+    { word: "UMBRA", hint: "Darkest part of any shadow", d: "hard" },
+    { word: "NYMPH", hint: "Spirit born from water or forest", d: "hard" },
+    { word: "CAIRN", hint: "Stones stacked saying someone was here", d: "hard" },
+    { word: "GAUZE", hint: "So thin it barely insists on existing", d: "hard" },
+    { word: "THANE", hint: "Noble before nobles had castles", d: "hard" },
+    { word: "SCREE", hint: "Mountain's slow avalanche", d: "hard" },
+    { word: "ABAFT", hint: "Toward the stern of things", d: "hard" },
+    { word: "BESOM", hint: "Broom before brooms were named", d: "hard" },
+    { word: "CLEFT", hint: "Split but not apart", d: "hard" },
+    { word: "DEMUR", hint: "Hesitate with elegance", d: "hard" },
+    { word: "EYRIE", hint: "Where eagles choose to nest", d: "hard" },
+    { word: "GLOZE", hint: "Make wrong seem right with words", d: "hard" },
+    { word: "HELOT", hint: "Slave in ancient Sparta", d: "hard" },
+    { word: "ICHOR", hint: "Blood of gods, not mortals", d: "hard" },
+    { word: "KNURL", hint: "Ridged grip for holding tight", d: "hard" },
+    { word: "LOESS", hint: "Dust that became fertile earth", d: "hard" },
+    { word: "MOTTE", hint: "Hill built for castles", d: "hard" },
+    { word: "OXTER", hint: "Armpit in older tongues", d: "hard" },
+    { word: "PAEON", hint: "Foot in poetry, long then short", d: "hard" },
+    { word: "RECTO", hint: "Right page, properly speaking", d: "hard" },
+    { word: "SHOAT", hint: "Pig not yet grown", d: "hard" },
+    { word: "XYLEM", hint: "Wood that carries water up", d: "hard" },
+    { word: "ZIBET", hint: "Civet by another name", d: "hard" },
+    { word: "BHAJI", hint: "Fried vegetable of India", d: "hard" },
+    { word: "CRWTH", hint: "Welsh fiddle without vowels", d: "hard" },
+    { word: "DURRA", hint: "Grain of the dry places", d: "hard" },
+    { word: "EPHOD", hint: "Priest's garment, ancient and holy", d: "hard" },
+    { word: "GALOP", hint: "Dance faster than a waltz", d: "hard" },
+    { word: "HILUM", hint: "Scar where seed attached", d: "hard" },
+    { word: "KRAIT", hint: "Snake whose bite kills quietly", d: "hard" },
+    { word: "LOUPE", hint: "Lens for seeing tiny things", d: "hard" },
+    { word: "NIXIE", hint: "Water sprite of German tales", d: "hard" },
+    { word: "PILAU", hint: "Rice cooked with spices", d: "hard" },
+    { word: "RAPHE", hint: "Seam where parts grew together", d: "hard" },
+    { word: "SELAH", hint: "Pause in psalms, meaning unknown", d: "hard" },
+    { word: "THUJA", hint: "Tree of life in Latin", d: "hard" },
+    { word: "ULEMA", hint: "Islamic scholars together", d: "hard" },
+    { word: "WURST", hint: "Sausage in its mother tongue", d: "hard" },
+    { word: "XERIC", hint: "Dry adapted, desert dwelling", d: "hard" },
+    { word: "AGAMA", hint: "Lizard of warm places", d: "hard" },
+    { word: "BIJOU", hint: "Small but perfectly precious", d: "hard" },
+    { word: "COYPU", hint: "Rodent valued for fur", d: "hard" },
+    { word: "DINAR", hint: "Currency of ancient trade routes", d: "hard" },
+    { word: "FUTON", hint: "Bed that folds its purpose", d: "hard" },
+    { word: "GAMIN", hint: "Street child of old Paris", d: "hard" },
+    { word: "HOKUM", hint: "Nonsense dressed as wisdom", d: "hard" },
+    { word: "IMAGO", hint: "Insect in final form", d: "hard" },
+    { word: "KANJI", hint: "Chinese characters borrowed", d: "hard" },
+    { word: "MANAT", hint: "Currency of Caspian shores", d: "hard" },
+    { word: "NABOB", hint: "Rich man from the East", d: "hard" },
+    { word: "OCREA", hint: "Sheath around a plant stem", d: "hard" },
+    { word: "PALEA", hint: "Chaff among the wheat", d: "hard" },
+    { word: "QANAT", hint: "Underground channel carrying water", d: "hard" },
+    { word: "SABOT", hint: "Wooden shoe of workers", d: "hard" },
+    { word: "TAZZA", hint: "Shallow ornamental cup", d: "hard" },
+    { word: "UKASE", hint: "Decree from on high", d: "hard" },
+    { word: "VARNA", hint: "Social class in ancient India", d: "hard" },
+    { word: "WHELK", hint: "Sea snail with spiral shell", d: "hard" },
+    { word: "XERUS", hint: "African ground squirrel", d: "hard" },
+    { word: "YAPOK", hint: "Water opossum", d: "hard" },
+    { word: "ZAMIA", hint: "Primitive plant, cone-bearing", d: "hard" },
+    { word: "ARHAT", hint: "Buddhist who achieved enlightenment", d: "hard" },
+    { word: "BAHUT", hint: "Ornate chest of old France", d: "hard" },
+    { word: "CECUM", hint: "Pouch where intestines meet", d: "hard" },
+    { word: "DUROC", hint: "Breed of red pig", d: "hard" },
+    { word: "ERGOT", hint: "Fungus that grows on grain", d: "hard" },
+    { word: "FLEAM", hint: "Blade for letting blood", d: "hard" },
+    { word: "GALAH", hint: "Pink Australian cockatoo", d: "hard" },
+    { word: "HAKAM", hint: "Jewish legal authority", d: "hard" },
+    { word: "IXTLE", hint: "Fiber from agave plant", d: "hard" },
+    { word: "JORAM", hint: "Large drinking bowl", d: "hard" },
+    { word: "KEEVE", hint: "Large vat for brewing", d: "hard" },
+    { word: "LIDAR", hint: "Light that measures distance", d: "hard" },
+    { word: "MIXTE", hint: "Bicycle frame design", d: "hard" },
+    { word: "NOYAU", hint: "Liqueur of fruit pits", d: "hard" },
+    { word: "ORIBI", hint: "Small African antelope", d: "hard" },
+    { word: "PISTE", hint: "Ski run or fencing strip", d: "hard" },
+    // Hard 6-letter (80)
+    { word: "DARING", hint: "Jumps before looking, lands before doubting", d: "hard" },
+    { word: "MYSTIC", hint: "Lives where reason stops asking", d: "hard" },
+    { word: "FABLED", hint: "Famous in stories, maybe real", d: "hard" },
+    { word: "MANTLE", hint: "Layer carrying weight above", d: "hard" },
+    { word: "PATINA", hint: "Beauty only time knows how to apply", d: "hard" },
+    { word: "WINNOW", hint: "Separates grain from what never mattered", d: "hard" },
+    { word: "SPHENE", hint: "Gem named for its wedge shape", d: "hard" },
+    { word: "SPHINX", hint: "Riddle with lion's body", d: "hard" },
+    { word: "AUGURY", hint: "Future read in bird flights", d: "hard" },
+    { word: "COLURE", hint: "Great circle through the poles", d: "hard" },
+    { word: "DRACHM", hint: "Weight of ancient silver", d: "hard" },
+    { word: "EPOPEE", hint: "Epic poem in fancier dress", d: "hard" },
+    { word: "GNOMIC", hint: "Wisdom compressed to proverb", d: "hard" },
+    { word: "KRATER", hint: "Greek bowl for mixing wine", d: "hard" },
+    { word: "MENHIR", hint: "Standing stone from before writing", d: "hard" },
+    { word: "ORPHIC", hint: "Mysterious as ancient rites", d: "hard" },
+    { word: "QUINOA", hint: "Grain before grain was trendy", d: "hard" },
+    { word: "RHYTON", hint: "Cup shaped like a horn", d: "hard" },
+    { word: "SHOFAR", hint: "Horn that calls to prayer", d: "hard" },
+    { word: "URANIA", hint: "Muse of the stars", d: "hard" },
+    { word: "VOLUTE", hint: "Spiral in stone or shell", d: "hard" },
+    { word: "XOANON", hint: "Wooden idol of ancient Greece", d: "hard" },
+    { word: "YARROW", hint: "Herb that stanches wounds", d: "hard" },
+    { word: "ATRIUM", hint: "Heart's chamber or Roman court", d: "hard" },
+    { word: "BYSSUS", hint: "Fine cloth of ancient times", d: "hard" },
+    { word: "DOLMEN", hint: "Stone table of the ancients", d: "hard" },
+    { word: "ESCARP", hint: "Steep slope of fortification", d: "hard" },
+    { word: "FULMAR", hint: "Seabird of northern storms", d: "hard" },
+    { word: "GNOMON", hint: "Shadow-caster telling time", d: "hard" },
+    { word: "KELPIE", hint: "Water horse of Scottish tales", d: "hard" },
+    { word: "LUNULA", hint: "Crescent moon on fingernail", d: "hard" },
+    { word: "MERINO", hint: "Sheep finer than others", d: "hard" },
+    { word: "OCULUS", hint: "Eye or window round", d: "hard" },
+    { word: "PHLOEM", hint: "Plant tissue carrying sugar down", d: "hard" },
+    { word: "QUASAR", hint: "Distant light beyond imagining", d: "hard" },
+    { word: "VELLUM", hint: "Skin prepared for writing", d: "hard" },
+    { word: "ZENANA", hint: "Women's quarters, hidden away", d: "hard" },
+    { word: "BAGNIO", hint: "Bathhouse of ill repute", d: "hard" },
+    { word: "DICAST", hint: "Juror of ancient Athens", d: "hard" },
+    { word: "EPHEBE", hint: "Youth of ancient Greece", d: "hard" },
+    { word: "FIRKIN", hint: "Small barrel for butter", d: "hard" },
+    { word: "GRILSE", hint: "Salmon returning young", d: "hard" },
+    { word: "HERIOT", hint: "Tax paid when tenant dies", d: "hard" },
+    { word: "JEREED", hint: "Javelin of Turkish games", d: "hard" },
+    { word: "KERMIS", hint: "Fair in Low Countries", d: "hard" },
+    { word: "LORICA", hint: "Roman armor of scales", d: "hard" },
+    { word: "MAMMON", hint: "Wealth as false god", d: "hard" },
+    { word: "NOSTOC", hint: "Jelly from fallen stars, or so thought", d: "hard" },
+    { word: "PINOLE", hint: "Ground corn of native peoples", d: "hard" },
+    { word: "QUAHOG", hint: "Clam of New England shores", d: "hard" },
+    { word: "REGLET", hint: "Narrow molding in printing", d: "hard" },
+    { word: "SERAPH", hint: "Angel of highest order", d: "hard" },
+    { word: "TABARD", hint: "Knight's coat over armor", d: "hard" },
+    { word: "WIMPLE", hint: "Nun's cloth covering head", d: "hard" },
+    { word: "XYLOID", hint: "Like wood, wooden", d: "hard" },
+    { word: "YOGINI", hint: "Female practitioner of yoga", d: "hard" },
+    { word: "ZEUGMA", hint: "One word governing two meanings", d: "hard" },
+    { word: "ATLATL", hint: "Spear thrower of ancient hunters", d: "hard" },
+    { word: "BARQUE", hint: "Sailing ship of three masts", d: "hard" },
+    { word: "CARBOY", hint: "Large bottle in protective frame", d: "hard" },
+    { word: "ENOSIS", hint: "Union as political dream", d: "hard" },
+    { word: "GHARRI", hint: "Carriage of India", d: "hard" },
+    { word: "HACKLE", hint: "Feathers or fighting spirit", d: "hard" },
+    { word: "IMARET", hint: "Turkish inn for pilgrims", d: "hard" },
+    { word: "JENNET", hint: "Small Spanish horse", d: "hard" },
+    { word: "KAMALA", hint: "Red powder from eastern tree", d: "hard" },
+    { word: "LAMPAD", hint: "Torch bearer of ancient nights", d: "hard" },
+    { word: "MERMAN", hint: "Male spirit of the sea", d: "hard" },
+    { word: "NEREID", hint: "Sea nymph of Greek myth", d: "hard" },
+    { word: "OMASUM", hint: "Third stomach of the cow", d: "hard" },
+    { word: "PLINTH", hint: "Base on which column stands", d: "hard" },
+    { word: "QIBLA", hint: "Direction of Mecca", d: "hard" },
+    { word: "ROSACE", hint: "Rose window of cathedral", d: "hard" },
+    { word: "SACHEM", hint: "Chief of native peoples", d: "hard" },
+    { word: "TANIST", hint: "Heir to Celtic king", d: "hard" },
+    { word: "URAEUS", hint: "Cobra on pharaoh's crown", d: "hard" },
+    { word: "VERGER", hint: "Church caretaker", d: "hard" },
+    { word: "WETHER", hint: "Castrated sheep", d: "hard" },
+    { word: "YTTRIA", hint: "Rare earth oxide", d: "hard" },
+    { word: "ZADDIK", hint: "Righteous person in Judaism", d: "hard" },
+];
+
+const WIN_MESSAGES = [
+    "🎉 You Did It!", "🏆 Victory!", "🌟 Level Cleared!",
+    "🔥 Outstanding!", "💥 Nailed It!", "⭐ Perfect!",
+    "🎯 Target Achieved!", "👑 Champion!", "💎 Master Move!",
+    "⚡ Unstoppable!", "👏 So Proud!", "🌈 Well Done!",
+    "🥇 You Earned This!", "💪 Keep Shining!", "🎊 Brilliant!",
+    "🚀 Stellar!", "✨ Magnificent!", "🔮 Incredible!",
+    "🌙 Fantastic!", "💫 Amazing!"
+];
+
+const MAX_GUESSES = 6;
+const WINS_TO_MOON = 10;
+
+// Game state
+let usedIndices = [];
+let puzzle = null;
+let guesses = [];
+let currentInput = "";
+let gameOver = false;
+let won = false;
+let keyStates = {};
+let score = { wins: 0, played: 0 };
+let showAnswer = false;
+let lastDifficulty = null; // Track last puzzle difficulty
+let hintUsed = false; // Track if hint was used for current puzzle
+let totalXP = 0; // Total XP accumulated
+let lastEarnedXP = 0; // XP earned from last puzzle
+let previousXP = 0; // XP before current puzzle (for animation)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// XP LEVEL SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+const RANKS = [
+    { name: "Rookie Resolver", xpRequired: 0 },
+    { name: "Clue Catcher", xpRequired: 400 },
+    { name: "Mind Mover", xpRequired: 1000 },
+    { name: "Pattern Seeker", xpRequired: 1900 },
+    { name: "Logic Tinkerer", xpRequired: 3200 },
+    { name: "Puzzle Prodigy", xpRequired: 5000 },
+    { name: "Brain Master", xpRequired: 7400 },
+    { name: "Solution Strategist", xpRequired: 10600 },
+    { name: "Riddle Champion", xpRequired: 14800 },
+    { name: "Puzzle Grandmaster", xpRequired: 20300 },
+    { name: "Quick Thinker", xpRequired: 27300 },
+    { name: "The Solver", xpRequired: 36300 },
+    { name: "Mind Mechanic", xpRequired: 47800 },
+    { name: "Logic Legend", xpRequired: 62300 },
+    { name: "Puzzle Professor", xpRequired: 80300 },
+    { name: "Clue Commander", xpRequired: 102300 },
+    { name: "Mastermind", xpRequired: 128300 },
+    { name: "Enigma Expert", xpRequired: 158300 },
+    { name: "Brainiac", xpRequired: 193300 },
+    { name: "The Unraveler", xpRequired: 233300 },
+];
+
+function getRankInfo(xp) {
+    let currentRank = RANKS[0];
+    let nextRank = RANKS[1];
+    
+    for (let i = 0; i < RANKS.length; i++) {
+        if (xp >= RANKS[i].xpRequired) {
+            currentRank = RANKS[i];
+            nextRank = RANKS[i + 1] || null;
+        } else {
+            break;
+        }
+    }
+    
+    // Calculate progress percentage to next rank
+    let progressPercent = 100;
+    if (nextRank) {
+        const xpInCurrentRank = xp - currentRank.xpRequired;
+        const xpNeededForNext = nextRank.xpRequired - currentRank.xpRequired;
+        progressPercent = Math.floor((xpInCurrentRank / xpNeededForNext) * 100);
+    }
+    
+    return {
+        rank: currentRank.name,
+        progress: progressPercent,
+        currentXP: xp,
+        nextRankXP: nextRank ? nextRank.xpRequired : null,
+        nextRank: nextRank ? nextRank.name : null
+    };
+}
+
+function showProgressBar() {
+    const prevInfo = getRankInfo(previousXP);
+    const newInfo = getRankInfo(totalXP);
+    
+    const progressBar = document.getElementById("xp-progress-bar");
+    const rankTitle = document.getElementById("rank-title");
+    const progressFill = document.getElementById("progress-fill-bar");
+    const progressPercent = document.getElementById("progress-percent");
+    const progressTrack = document.getElementById("progress-track");
+    const hintCard = document.getElementById("hint-card");
+    
+    // Set initial state (previous values)
+    rankTitle.textContent = prevInfo.rank;
+    progressFill.style.transition = "none";
+    progressFill.style.width = prevInfo.progress + "%";
+    progressPercent.textContent = prevInfo.progress + "%";
+    
+    // Reset classes
+    rankTitle.classList.remove("scale-up");
+    progressTrack.classList.remove("scale-up");
+    progressPercent.classList.remove("scale-up");
+    progressBar.classList.remove("dissolve");
+    
+    // Show the progress bar at center of grid
+    progressBar.classList.add("show");
+    
+    // Force reflow
+    void progressFill.offsetWidth;
+    
+    // Check if rank changed
+    const rankChanged = prevInfo.rank !== newInfo.rank;
+    
+    let animationDuration = 1000;
+    
+    if (rankChanged) {
+        animationDuration = 1500;
+        
+        // Scale up when animation starts
+        setTimeout(() => {
+            rankTitle.classList.add("scale-up");
+            progressTrack.classList.add("scale-up");
+            progressPercent.classList.add("scale-up");
+            
+            // Start progress animation
+            progressFill.style.transition = "width 0.5s ease-out";
+            progressFill.style.width = "100%";
+        }, 400);
+        
+        // Rank change sequence
+        setTimeout(() => {
+            // Update rank title with pop animation
+            rankTitle.textContent = newInfo.rank;
+            rankTitle.classList.add("pop");
+            
+            // Reset bar and animate to new progress
+            progressFill.style.transition = "none";
+            progressFill.style.width = "0%";
+            void progressFill.offsetWidth;
+            
+            progressFill.style.transition = "width 0.5s ease-out";
+            progressFill.style.width = newInfo.progress + "%";
+            
+            setTimeout(() => {
+                progressPercent.textContent = newInfo.progress + "%";
+                rankTitle.classList.remove("pop");
+                
+                // Scale down when animation ends
+                rankTitle.classList.remove("scale-up");
+                progressTrack.classList.remove("scale-up");
+                progressPercent.classList.remove("scale-up");
+            }, 500);
+        }, 900);
+    } else {
+        // Scale up when animation starts
+        setTimeout(() => {
+            rankTitle.classList.add("scale-up");
+            progressTrack.classList.add("scale-up");
+            progressPercent.classList.add("scale-up");
+            
+            // Start progress animation
+            progressFill.style.transition = "width 1s ease-out";
+            progressFill.style.width = newInfo.progress + "%";
+            
+            // Scale down when animation ends
+            setTimeout(() => {
+                progressPercent.textContent = newInfo.progress + "%";
+                
+                rankTitle.classList.remove("scale-up");
+                progressTrack.classList.remove("scale-up");
+                progressPercent.classList.remove("scale-up");
+            }, 1000);
+        }, 400);
+    }
+    
+    // Dissolve progress bar, play confetti, and load new puzzle
+    setTimeout(() => {
+        progressBar.classList.add("dissolve");
+        
+        // Play confetti (1.5s visible + 0.8s fade)
+        launchConfetti();
+        
+        setTimeout(() => {
+            progressBar.classList.remove("show");
+            progressBar.classList.remove("dissolve");
+            
+            // Load new puzzle (but keep hint hidden)
+            loadNewPuzzleKeepProgress();
+            
+            // Wait for confetti to finish (2.3 seconds), then fade in hint
+            setTimeout(() => {
+                hintCard.classList.remove("hidden");
+                hintCard.classList.remove("dissolve");
+                hintCard.classList.add("fadeIn");
+                
+                setTimeout(() => {
+                    hintCard.classList.remove("fadeIn");
+                }, 800);
+            }, 2300);
+        }, 400);
+    }, animationDuration + 1200);
+}
+
+// Load new puzzle but keep progress bar visible
+function loadNewPuzzleKeepProgress() {
+    const { w, i } = pickWord();
+    puzzle = w;
+    usedIndices.push(i);
+    guesses = [];
+    currentInput = "";
+    gameOver = false;
+    won = false;
+    keyStates = {};
+    showAnswer = false;
+    hintUsed = false;
+    
+    document.getElementById("answer-btn").textContent = "?";
+    document.getElementById("game-over").classList.remove("show");
+    document.getElementById("win-popup").classList.remove("show");
+    document.getElementById("win-popup").classList.remove("dissolve");
+    document.getElementById("win-message").textContent = "";
+    document.getElementById("win-answer").textContent = "";
+    document.getElementById("win-answer").classList.remove("show");
+    document.getElementById("win-answer").classList.remove("dissolve");
+    document.getElementById("win-xp").textContent = "";
+    document.getElementById("win-xp").classList.remove("animate");
+    // Don't touch progress bar - keep it visible
+    
+    renderGrid();
+    renderKeyboard();
+    updateHint();
+    updateProgress();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// XP REWARD SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+function calculateXP(wordLength, difficulty, attemptNumber, hintUsed) {
+    // Temporarily disabled - user requested to keep XP even when hint used
+    // if (hintUsed) return 0;
+    
+    // Base XP table
+    const baseXPTable = {
+        4: { easy: 60, medium: 80, hard: 100 },
+        5: { easy: 80, medium: 110, hard: 140 },
+        6: { easy: 110, medium: 140, hard: 180 }
+    };
+    
+    // Attempt multipliers
+    const attemptMultipliers = {
+        1: 2.2,
+        2: 1.8,
+        3: 1.5,
+        4: 1.3,
+        5: 1.1,
+        6: 1.0
+    };
+    
+    // Get base XP
+    const baseXP = baseXPTable[wordLength]?.[difficulty] || 0;
+    
+    // Get multiplier (clamp attempt to 1-6)
+    const attempt = Math.max(1, Math.min(6, attemptNumber));
+    const multiplier = attemptMultipliers[attempt];
+    
+    // Calculate final XP (rounded to nearest integer)
+    const xp = Math.round(baseXP * multiplier);
+    
+    return xp;
+}
+
+// Three.js variables
+let scene, camera, renderer, earth, atm, moon, rocketGroup;
+let camTargetY = 0, camCurrentY = 0;
+let starPositions, starDirections; // For animated stars
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GAME LOGIC
+// ═══════════════════════════════════════════════════════════════════════════
+
+function pickWord() {
+    let diff;
+    
+    // After a hard level, always give an easy level
+    if (lastDifficulty === "hard") {
+        diff = "easy";
+    } else {
+        const rand = Math.random();
+        diff = rand < 0.6 ? "easy" : rand < 0.85 ? "medium" : "hard";
+    }
+    
+    let pool = WORD_LIST.map((w, i) => ({ w, i })).filter(({ i, w }) => !usedIndices.includes(i) && w.d === diff);
+    if (!pool.length) pool = WORD_LIST.map((w, i) => ({ w, i })).filter(({ i }) => !usedIndices.includes(i));
+    if (!pool.length) pool = WORD_LIST.map((w, i) => ({ w, i }));
+    
+    const selected = pool[Math.floor(Math.random() * pool.length)];
+    lastDifficulty = selected.w.d; // Track this puzzle's difficulty
+    
+    return selected;
+}
+
+function getTileState(guess, answer) {
+    const result = Array(guess.length).fill("absent");
+    const ans = answer.split("");
+    const used = Array(answer.length).fill(false);
+    for (let i = 0; i < guess.length; i++) {
+        if (guess[i] === ans[i]) { result[i] = "correct"; used[i] = true; }
+    }
+    for (let i = 0; i < guess.length; i++) {
+        if (result[i] === "correct") continue;
+        for (let j = 0; j < ans.length; j++) {
+            if (!used[j] && guess[i] === ans[j]) { result[i] = "present"; used[j] = true; break; }
+        }
+    }
+    return result;
+}
+
+function loadNewPuzzle() {
+    const { w, i } = pickWord();
+    puzzle = w;
+    usedIndices.push(i);
+    guesses = [];
+    currentInput = "";
+    gameOver = false;
+    won = false;
+    keyStates = {};
+    showAnswer = false;
+    hintUsed = false; // Reset hint usage for new puzzle
+    
+    document.getElementById("answer-btn").textContent = "?";
+    document.getElementById("game-over").classList.remove("show");
+    document.getElementById("win-popup").classList.remove("show");
+    document.getElementById("win-popup").classList.remove("dissolve");
+    document.getElementById("win-message").textContent = "";
+    document.getElementById("win-answer").textContent = "";
+    document.getElementById("win-answer").classList.remove("show");
+    document.getElementById("win-answer").classList.remove("dissolve");
+    document.getElementById("win-xp").textContent = "";
+    document.getElementById("win-xp").classList.remove("animate");
+    document.getElementById("hint-card").classList.remove("hidden");
+    document.getElementById("hint-card").classList.remove("dissolve");
+    document.getElementById("hint-card").classList.remove("fadeIn");
+    // Don't hide progress bar - it stays visible after first win
+    
+    renderGrid();
+    renderKeyboard();
+    updateHint();
+    updateProgress();
+}
+
+function submitGuess() {
+    if (!puzzle || gameOver) return;
+    const wordLen = puzzle.word.length;
+    
+    if (currentInput.length !== wordLen) {
+        const rows = document.querySelectorAll(".row");
+        rows[guesses.length]?.classList.add("shake");
+        setTimeout(() => rows[guesses.length]?.classList.remove("shake"), 500);
+        return;
+    }
+    
+    const upper = currentInput.toUpperCase();
+    const states = getTileState(upper, puzzle.word);
+    guesses.push({ word: upper, states });
+    currentInput = "";
+    
+    // Update key states
+    for (let i = 0; i < upper.length; i++) {
+        const l = upper[i], s = states[i];
+        if (s === "correct") keyStates[l] = "correct";
+        else if (s === "present" && keyStates[l] !== "correct") keyStates[l] = "present";
+        else if (!keyStates[l]) keyStates[l] = "absent";
+    }
+    
+    renderGrid();
+    renderKeyboard();
+    
+    if (upper === puzzle.word) {
+        score.wins++;
+        score.played++;
+        won = true;
+        gameOver = true;
+        
+        // Calculate XP earned
+        const wordLength = puzzle.word.length;
+        const difficulty = puzzle.d;
+        const attemptNumber = guesses.length;
+        previousXP = totalXP; // Save previous XP for progress bar animation
+        lastEarnedXP = calculateXP(wordLength, difficulty, attemptNumber, hintUsed);
+        totalXP += lastEarnedXP;
+        
+        // Confetti plays after progress bar update
+        
+        // Dissolve hint text immediately
+        document.getElementById("hint-card").classList.add("dissolve");
+        
+        // Hide hint card after dissolve animation
+        setTimeout(() => {
+            document.getElementById("hint-card").classList.add("hidden");
+            document.getElementById("hint-card").classList.remove("dissolve");
+        }, 400);
+        
+        // Show victory message after confetti starts
+        setTimeout(() => {
+            document.getElementById("win-message").textContent = WIN_MESSAGES[Math.floor(Math.random() * WIN_MESSAGES.length)];
+            document.getElementById("win-popup").classList.add("show");
+        }, 500);
+        
+        // Dissolve victory message
+        setTimeout(() => {
+            const popup = document.getElementById("win-popup");
+            popup.classList.remove("show");
+            popup.classList.add("dissolve");
+        }, 1500);
+        
+        // Show XP floating up
+        setTimeout(() => {
+            const xpEl = document.getElementById("win-xp");
+            xpEl.textContent = lastEarnedXP > 0 ? `+${lastEarnedXP} XP` : "+0 XP";
+            xpEl.classList.remove("animate");
+            void xpEl.offsetWidth;
+            xpEl.classList.add("animate");
+            
+            // Update total XP display
+            updateTotalXPDisplay();
+            
+            // Show progress bar immediately after XP animation (1s)
+            setTimeout(() => {
+                showProgressBar();
+            }, 1000);
+        }, 1900);
+        
+        updateProgress();
+        updateSpaceScene();
+    } else if (guesses.length >= MAX_GUESSES) {
+        gameOver = true;
+        score.played++;
+        document.getElementById("game-over").classList.add("show");
+        updateProgress();
+        
+        // Auto-load next puzzle after showing game over
+        setTimeout(() => {
+            document.getElementById("game-over").classList.remove("show");
+            loadNewPuzzle();
+        }, 2000);
+    }
+}
+
+function handleKey(k) {
+    if (gameOver) return;
+    if (k === "ENTER") { submitGuess(); return; }
+    if (k === "⌫" || k === "BACKSPACE") { currentInput = currentInput.slice(0, -1); renderGrid(); return; }
+    if (/^[A-Z]$/.test(k) && currentInput.length < puzzle.word.length) {
+        currentInput += k;
+        renderGrid();
+    }
+}
+
+function toggleAnswer() {
+    showAnswer = !showAnswer;
+    if (showAnswer) {
+        hintUsed = true; // Mark hint as used when answer is revealed
+    }
+    document.getElementById("answer-btn").textContent = showAnswer ? puzzle.word : "?";
+}
+
+function resetGame() {
+    score.wins = 0;
+    usedIndices = [];
+    lastDifficulty = null;
+    hintUsed = false;
+    totalXP = 0;
+    lastEarnedXP = 0;
+    previousXP = 0;
+    document.getElementById("moon-overlay").classList.remove("show");
+    document.getElementById("xp-progress-bar").classList.remove("show");
+    updateTotalXPDisplay();
+    updateSpaceScene();
+    loadNewPuzzle();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI RENDERING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderGrid() {
+    const grid = document.getElementById("grid");
+    const wordLen = puzzle.word.length;
+    
+    // Adjust tile size based on word length
+    const maxWidth = Math.min(window.innerWidth - 32, 468);
+    const tileSize = Math.min(52, Math.floor((maxWidth - (wordLen - 1) * 5) / wordLen));
+    
+    grid.innerHTML = "";
+    for (let r = 0; r < MAX_GUESSES; r++) {
+        const row = document.createElement("div");
+        row.className = "row";
+        
+        for (let c = 0; c < wordLen; c++) {
+            const tile = document.createElement("div");
+            tile.className = "tile";
+            tile.style.width = tileSize + "px";
+            tile.style.height = tileSize + "px";
+            tile.style.fontSize = (tileSize * 0.46) + "px";
+            
+            let letter = "", state = "";
+            if (r < guesses.length) {
+                letter = guesses[r].word[c];
+                state = guesses[r].states[c];
+            } else if (r === guesses.length && !gameOver) {
+                letter = currentInput[c] || "";
+                if (letter) state = "active";
+            }
+            
+            tile.textContent = letter;
+            if (state) tile.classList.add(state);
+            row.appendChild(tile);
+        }
+        grid.appendChild(row);
+    }
+}
+
+function renderKeyboard() {
+    const keyboard = document.getElementById("keyboard");
+    const rows = ["QWERTYUIOP", "ASDFGHJKL", "⌫ZXCVBNM↵"];
+    
+    keyboard.innerHTML = "";
+    rows.forEach(row => {
+        const rowDiv = document.createElement("div");
+        rowDiv.className = "keyboard-row";
+        
+        row.split("").forEach(char => {
+            const key = document.createElement("button");
+            key.className = "key";
+            
+            const keyVal = char === "↵" ? "ENTER" : char;
+            if (char === "⌫" || char === "↵") key.classList.add("wide");
+            
+            const state = keyStates[char];
+            if (state) key.classList.add(state);
+            
+            key.textContent = char === "↵" ? "↵" : char;
+            key.onclick = () => handleKey(keyVal);
+            rowDiv.appendChild(key);
+        });
+        keyboard.appendChild(rowDiv);
+    });
+}
+
+function updateHint() {
+    document.getElementById("hint-text").textContent = puzzle.hint;
+    document.getElementById("score-display").textContent = "";
+    updateTotalXPDisplay();
+}
+
+function updateTotalXPDisplay() {
+    document.getElementById("total-xp-display").textContent = "⭐ " + totalXP + " XP";
+}
+
+function updateProgress() {
+    const progress = Math.min(score.wins / WINS_TO_MOON, 1);
+    document.getElementById("progress-wins").textContent = `${score.wins}/${WINS_TO_MOON} wins`;
+    document.getElementById("progress-fill").style.width = (progress * 100) + "%";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONFETTI
+// ═══════════════════════════════════════════════════════════════════════════
+
+function launchConfetti() {
+    const canvas = document.getElementById("confetti-canvas");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    canvas.style.display = "block";
+    const ctx = canvas.getContext("2d");
+    
+    const pieces = Array.from({ length: 100 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * -canvas.height * 0.5,
+        w: Math.random() * 10 + 6,
+        h: Math.random() * 6 + 3,
+        color: ["#538d4e", "#b59f3b", "#ff6b6b", "#4ecdc4", "#ffe66d", "#a855f7"][Math.floor(Math.random() * 6)],
+        speed: Math.random() * 3 + 2,
+        angle: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 0.15,
+        opacity: 1,
+    }));
+    
+    let frame;
+    const startTime = Date.now();
+    const stayDuration = 1500; // Stay visible for 1.5 seconds
+    const fadeDuration = 800; // Fade out over 0.8 seconds
+    const totalDuration = stayDuration + fadeDuration;
+    
+    const draw = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const elapsed = Date.now() - startTime;
+        
+        // Calculate global fade - start fading after stayDuration
+        let globalFade = 1;
+        if (elapsed > stayDuration) {
+            globalFade = 1 - ((elapsed - stayDuration) / fadeDuration);
+            if (globalFade < 0) globalFade = 0;
+        }
+        
+        let activeCount = 0;
+        pieces.forEach(p => {
+            p.y += p.speed;
+            p.angle += p.spin;
+            
+            p.opacity = globalFade;
+            
+            if (p.opacity > 0.01) {
+                activeCount++;
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.angle);
+                ctx.globalAlpha = p.opacity;
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+                ctx.restore();
+            }
+        });
+        
+        if (activeCount > 0 && elapsed < totalDuration) {
+            frame = requestAnimationFrame(draw);
+        } else {
+            canvas.style.display = "none";
+        }
+    };
+    draw();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THREE.JS SPACE SCENE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function initSpaceScene() {
+    const canvas = document.getElementById("space-canvas");
+    
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000008);
+    
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera.position.set(0, 0, 12);
+    
+    // Stars (animated)
+    const starGeo = new THREE.BufferGeometry();
+    const starVerts = [];
+    starDirections = []; // Store direction and speed for each star
+    for (let i = 0; i < 3000; i++) {
+        starVerts.push(
+            (Math.random() - 0.5) * 1000, 
+            (Math.random() - 0.5) * 1000, 
+            (Math.random() - 0.5) * 400 - 50
+        );
+        // Random direction: -1 (left) or 1 (right), with random speed
+        starDirections.push({
+            dir: Math.random() > 0.5 ? 1 : -1,
+            speed: Math.random() * 0.025 + 0.01 // Speed between 0.01 and 0.035 (50% slower)
+        });
+    }
+    starGeo.setAttribute("position", new THREE.Float32BufferAttribute(starVerts, 3));
+    starPositions = starGeo.attributes.position; // Store reference for animation
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, sizeAttenuation: true });
+    scene.add(new THREE.Points(starGeo, starMat));
+    
+    // Earth (hidden)
+    const earthGeo = new THREE.SphereGeometry(5, 48, 48);
+    const earthMat = new THREE.MeshPhongMaterial({ color: 0x1a6bb5, emissive: 0x0a2244, shininess: 60 });
+    earth = new THREE.Mesh(earthGeo, earthMat);
+    earth.position.set(0, -13, 0);
+    earth.visible = false;
+    scene.add(earth);
+    
+    // Land patches (hidden)
+    const landData = [[0.6, 0.3, 0.8], [-0.4, 0.5, 0.9], [0.2, -0.3, 0.7], [-0.7, -0.2, 0.6], [0.9, -0.1, 0.5], [-0.2, 0.8, 0.6], [0.4, -0.7, 0.5], [-0.8, 0.4, 0.4]];
+    landData.forEach(([x, y, z]) => {
+        const g = new THREE.SphereGeometry(0.7 + Math.random() * 0.4, 12, 12);
+        const m = new THREE.MeshPhongMaterial({ color: 0x2d8a4e, emissive: 0x0a3018 });
+        const mesh = new THREE.Mesh(g, m);
+        const v = new THREE.Vector3(x, y, z).normalize().multiplyScalar(5.1);
+        mesh.position.copy(v).add(earth.position);
+        mesh.visible = false;
+        scene.add(mesh);
+    });
+    
+    // Atmosphere (hidden)
+    const atmGeo = new THREE.SphereGeometry(5.4, 48, 48);
+    const atmMat = new THREE.MeshPhongMaterial({ color: 0x4488ff, transparent: true, opacity: 0.1, side: THREE.FrontSide });
+    atm = new THREE.Mesh(atmGeo, atmMat);
+    atm.position.copy(earth.position);
+    atm.visible = false;
+    scene.add(atm);
+    
+    // Moon (hidden)
+    const moonGeo = new THREE.SphereGeometry(1.2, 32, 32);
+    const moonMat = new THREE.MeshPhongMaterial({ color: 0xccccaa, emissive: 0x222210, shininess: 10 });
+    moon = new THREE.Mesh(moonGeo, moonMat);
+    moon.position.set(2, 65, -10);
+    moon.visible = false;
+    scene.add(moon);
+    
+    // Moon craters (hidden)
+    for (let i = 0; i < 8; i++) {
+        const cg = new THREE.SphereGeometry(0.06 + Math.random() * 0.1, 8, 8);
+        const cm = new THREE.MeshPhongMaterial({ color: 0xaaaaaa, emissive: 0x111100 });
+        const cr = new THREE.Mesh(cg, cm);
+        const theta = Math.random() * Math.PI * 2, phi = Math.random() * Math.PI;
+        cr.position.set(Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)).normalize().multiplyScalar(1.21).add(moon.position);
+        cr.visible = false;
+        scene.add(cr);
+    }
+    
+    // Progress indicator stars (hidden)
+    for (let i = 1; i < WINS_TO_MOON; i++) {
+        const sg = new THREE.SphereGeometry(0.08, 8, 8);
+        const sm = new THREE.MeshBasicMaterial({ color: 0xffdd44, transparent: true, opacity: 0.4 });
+        const s = new THREE.Mesh(sg, sm);
+        const t = i / WINS_TO_MOON;
+        s.position.set(Math.sin(t * 2) * 1.5, -6 + t * 66, -2);
+        s.visible = false;
+        scene.add(s);
+    }
+    
+    // Rocket (hidden)
+    rocketGroup = new THREE.Group();
+    const bodyGeo = new THREE.CylinderGeometry(0.08, 0.12, 0.5, 12);
+    const bodyMat = new THREE.MeshPhongMaterial({ color: 0xeeeeee, emissive: 0x222222 });
+    rocketGroup.add(new THREE.Mesh(bodyGeo, bodyMat));
+    
+    const noseGeo = new THREE.CylinderGeometry(0, 0.08, 0.25, 12);
+    const noseMesh = new THREE.Mesh(noseGeo, new THREE.MeshPhongMaterial({ color: 0xff4444, emissive: 0x220000 }));
+    noseMesh.position.y = 0.375;
+    rocketGroup.add(noseMesh);
+    
+    [-1, 1].forEach(side => {
+        const finGeo = new THREE.BoxGeometry(0.18, 0.15, 0.04);
+        const fin = new THREE.Mesh(finGeo, new THREE.MeshPhongMaterial({ color: 0xff4444 }));
+        fin.position.set(side * 0.13, -0.18, 0);
+        rocketGroup.add(fin);
+    });
+    
+    rocketGroup.position.set(0.8, -7, 0);
+    rocketGroup.visible = false;
+    scene.add(rocketGroup);
+    
+    // Lights
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+    sun.position.set(10, 10, 10);
+    scene.add(sun);
+    scene.add(new THREE.AmbientLight(0x223366, 1.0));
+    
+    animate();
+    
+    window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+}
+
+function updateSpaceScene() {
+    // Progress-based camera/rocket movement disabled - user designing new XP system
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    
+    // Animate stars moving left/right
+    if (starPositions && starDirections) {
+        for (let i = 0; i < starPositions.count; i++) {
+            let x = starPositions.getX(i);
+            x += starDirections[i].dir * starDirections[i].speed;
+            
+            // Wrap around when star goes off screen
+            if (x > 500) x = -500;
+            if (x < -500) x = 500;
+            
+            starPositions.setX(i, x);
+        }
+        starPositions.needsUpdate = true;
+    }
+    
+    // Fixed camera position
+    camera.position.y = 0;
+    camera.lookAt(0, -6, 0);
+    
+    renderer.render(scene, camera);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+document.addEventListener("DOMContentLoaded", () => {
+    initSpaceScene();
+    loadNewPuzzle();
+    
+    // Keyboard events
+    document.addEventListener("keydown", (e) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        // Skip if hidden input is focused (mobile will use input event instead)
+        if (document.activeElement === document.getElementById("hidden-input")) return;
+        const k = e.key.toUpperCase();
+        if (k === "ENTER") handleKey("ENTER");
+        else if (k === "BACKSPACE") handleKey("⌫");
+        else if (/^[A-Z]$/.test(k)) handleKey(k);
+    });
+    
+    // Mobile: tap on grid area to show keyboard
+    document.getElementById("grid-container").addEventListener("click", () => {
+        document.getElementById("hidden-input").focus();
+    });
+    
+    // Mobile input
+    const hiddenInput = document.getElementById("hidden-input");
+    hiddenInput.addEventListener("input", (e) => {
+        const val = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
+        if (val.length > 0) {
+            handleKey(val[val.length - 1]);
+        }
+        hiddenInput.value = "";
+    });
+    
+    // Handle Enter/Backspace on mobile
+    hiddenInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            handleKey("ENTER");
+        } else if (e.key === "Backspace") {
+            e.preventDefault();
+            handleKey("⌫");
+        }
+    });
+});
+</script>
+</body>
+</html>
